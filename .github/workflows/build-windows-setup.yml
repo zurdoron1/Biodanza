@@ -1,0 +1,57 @@
+name: Build Biodanza Windows Setup
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rebuild index.html
+        shell: pwsh
+        run: |
+          $parts = @(
+            "src-archive/index.html.gz.b64.part01",
+            "src-archive/index.html.gz.b64.part02",
+            "src-archive/index.html.gz.b64.part03",
+            "src-archive/index.html.gz.b64.part04"
+          )
+          $b64 = ($parts | ForEach-Object { Get-Content $_ -Raw }) -join ""
+          $gzPath = Join-Path $PWD "index.html.gz"
+          [IO.File]::WriteAllBytes($gzPath, [Convert]::FromBase64String($b64))
+          $in = [IO.File]::OpenRead($gzPath)
+          $out = [IO.File]::Create((Join-Path $PWD "index.html"))
+          $gzip = New-Object IO.Compression.GzipStream($in, [IO.Compression.CompressionMode]::Decompress)
+          $gzip.CopyTo($out)
+          $gzip.Dispose(); $out.Dispose(); $in.Dispose()
+          if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
+          Write-Host "index.html size: $((Get-Item index.html).Length)"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Windows Setup
+        run: npm run build:setup
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.2.0.exe" -File | Select-Object -First 1
+          if (-not $setup) { throw "Setup EXE was not created" }
+          Write-Host "Created: $($setup.FullName)"
+
+      - name: Upload Setup EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Biodanza-Music-Player-Setup-5.2.0
+          path: dist/Biodanza Music Player Setup 5.2.0.exe
