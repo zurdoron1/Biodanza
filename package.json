@@ -1,0 +1,53 @@
+{
+  "name": "biodanza-music-player",
+  "productName": "Biodanza Music Player",
+  "version": "5.2.0",
+  "description": "נגן מיון ואפיון מוזיקה לביודנסה - גרסת Electron",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis --x64",
+    "build:portable": "electron-builder --win portable --x64",
+    "build:setup": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "local.biodanza.musicplayer",
+    "productName": "Biodanza Music Player",
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Biodanza Music Player",
+      "uninstallDisplayName": "Biodanza Music Player",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "artifactName": "Biodanza Music Player Setup 5.2.0.${ext}",
+    "asar": true
+  }
+}
