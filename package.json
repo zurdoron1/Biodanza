@@ -7,9 +7,9 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win nsis --x64",
-    "build:portable": "electron-builder --win portable --x64",
-    "build:setup": "electron-builder --win nsis --x64"
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:portable": "electron-builder --win portable --x64 --publish never",
+    "build:setup": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "43.2.0",
