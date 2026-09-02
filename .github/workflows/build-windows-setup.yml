@@ -59,6 +59,15 @@ jobs:
           Set-Content index.html -Value $html -Encoding UTF8
           Write-Host "index.html size: $((Get-Item index.html).Length)"
 
+      - name: Upload patched renderer debug files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Biodanza-renderer-debug
+          path: |
+            index.html
+            folder-controls.js
+          if-no-files-found: error
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
