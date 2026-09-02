@@ -33,6 +33,9 @@ jobs:
 
           $html = Get-Content index.html -Raw
 
+          # Any remaining legacy localStorage annotation writes must never be allowed to crash the renderer.
+          $html = $html.Replace("localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));", "try{localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));}catch{}")
+
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
           if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
           if ($html -notmatch '__biodanzaLoadElectronLibrary') {
@@ -43,17 +46,21 @@ jobs:
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
 
+          # Relink code must run inside the original renderer IIFE so it can access state and helper functions.
           $relink = Get-Content relink-upgrade.js -Raw
           $relink = $relink.Replace("const headerToolbar = document.querySelector('#topCard header .toolbar');", "const headerToolbar = document.querySelector('#advancedHost') || document.querySelector('#topCard header .toolbar');")
           $relink = $relink.Replace("const topCard = `$id('topCard');", "const topCard = `$id('advancedHost') || `$id('topCard');")
           $relink = $relink.Replace("importLabel.textContent = '📥 ייבא חבילת העברה';", "importLabel.textContent = '📥 ייבא חבילת העברה ושייך מחדש';")
-          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.4.6'")
+          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.4.7'")
           $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
-          $html = $html.Substring(0,$lastClose) + "`n// ---- transfer and relink feature ----`n" + $relink + "`n" + $html.Substring($lastClose)
+
+          $dataStore = Get-Content data-store-upgrade.js -Raw
+          $insidePatch = "`n// ---- transfer and relink feature ----`n" + $relink + "`n// ---- file-backed player database ----`n" + $dataStore + "`n"
+          $html = $html.Substring(0,$lastClose) + $insidePatch + $html.Substring($lastClose)
 
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
-          if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found after relink injection" }
+          if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found after feature injection" }
           $safeTailB64 = "CigoKSA9PiB7CiAgY29uc3QgaXNFbGVjdHJvbiA9IEJvb2xlYW4od2luZG93LmVsZWN0cm9uQVBJPy5pc0VsZWN0cm9uKTsKICBpZiAoIWlzRWxlY3Ryb24pIHJldHVybjsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCdsYWJlbFtmb3I9ImZvbGRlciJdLGxhYmVsW2Zvcj0iZmlsZXMiXScpLmZvckVhY2goZWwgPT4gZWwuc3R5bGUuZGlzcGxheT0nbm9uZScpOwogIGNvbnN0IHRvcCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdlbGVjdHJvbkxpYnJhcnlTdGF0dXMnKTsKICBpZiAodG9wICYmICFkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnZWxlY3Ryb25Gb2xkZXJIaW50JykpIHsKICAgIHRvcC5pbnNlcnRBZGphY2VudEhUTUwoJ2FmdGVyZW5kJywnPGRpdiBpZD0iZWxlY3Ryb25Gb2xkZXJIaW50IiBjbGFzcz0ic21hbGwiIHN0eWxlPSJ3aWR0aDoxMDAlO21hcmdpbi10b3A6NHB4Ij5FbGVjdHJvbiDXqdeV157XqCDXkNeqINee15nXp9eV150g15TXqteZ16fXmdeZ15QuINeQ150g15TXmdeQINeq15XXoteR16gsINeR15fXqCDXkNeV16rXlCDXnteX15PXqSDXldeU157XkNeS16gg15TXp9eZ15nXnSDXmdeZ16nXkNeoLjwvZGl2PicpOwogIH0KfSkoKTsK"
           $safeTail = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($safeTailB64))
           $prefix = $html.Substring(0, $lastClose + 5)
@@ -94,6 +101,7 @@ jobs:
           node --check workspace-controls.js
           node --check language-update.js
           node --check relink-upgrade.js
+          node --check data-store-upgrade.js
           node --check inline-main.js
 
       - name: Verify patched index markers
@@ -103,6 +111,8 @@ jobs:
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
           if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
           if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
+          if ($html -notmatch '__restorePlayerDataFromDisk') { throw "File-backed data migration code missing" }
+          if ($html -notmatch 'writePlayerData') { throw "File-backed save code missing" }
           if ($html -match '<script src="relink-upgrade.js"></script>') { throw "Relink script must not be external" }
           if (($html | Select-String -Pattern '<script src="workspace-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "workspace-controls injection count is not 1" }
 
@@ -112,13 +122,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.6.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.7.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.6
-          path: dist/Biodanza Music Player Setup 5.4.6.exe
+          name: Biodanza-Music-Player-Setup-5.4.7
+          path: dist/Biodanza Music Player Setup 5.4.7.exe
           if-no-files-found: error
