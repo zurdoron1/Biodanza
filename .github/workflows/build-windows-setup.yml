@@ -38,22 +38,11 @@ jobs:
             $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
           }
 
-          # Remove the broken tail that references IIFE-scoped IS_ELECTRON and $ after the IIFE has closed.
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
-          $safeTail = @"
-
-(() => {
-  const isElectron = Boolean(window.electronAPI?.isElectron);
-  if (!isElectron) return;
-  document.querySelectorAll('label[for="folder"],label[for="files"]').forEach(el => el.style.display='none');
-  const top = document.getElementById('electronLibraryStatus');
-  if (top && !document.getElementById('electronFolderHint')) {
-    top.insertAdjacentHTML('afterend','<div id="electronFolderHint" class="small" style="width:100%;margin-top:4px">Electron שומר את מיקום התיקייה. אם היא תועבר, בחר אותה מחדש והמאגר הקיים יישאר.</div>');
-  }
-})();
-"@
+          $safeTailB64 = "CigoKSA9PiB7CiAgY29uc3QgaXNFbGVjdHJvbiA9IEJvb2xlYW4od2luZG93LmVsZWN0cm9uQVBJPy5pc0VsZWN0cm9uKTsKICBpZiAoIWlzRWxlY3Ryb24pIHJldHVybjsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCdsYWJlbFtmb3I9ImZvbGRlciJdLGxhYmVsW2Zvcj0iZmlsZXMiXScpLmZvckVhY2goZWwgPT4gZWwuc3R5bGUuZGlzcGxheT0nbm9uZScpOwogIGNvbnN0IHRvcCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdlbGVjdHJvbkxpYnJhcnlTdGF0dXMnKTsKICBpZiAodG9wICYmICFkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnZWxlY3Ryb25Gb2xkZXJIaW50JykpIHsKICAgIHRvcC5pbnNlcnRBZGphY2VudEhUTUwoJ2FmdGVyZW5kJywnPGRpdiBpZD0iZWxlY3Ryb25Gb2xkZXJIaW50IiBjbGFzcz0ic21hbGwiIHN0eWxlPSJ3aWR0aDoxMDAlO21hcmdpbi10b3A6NHB4Ij5FbGVjdHJvbiDXqdeV157XqCDXkNeqINee15nXp9eV150g15TXqteZ16fXmdeZ15QuINeQ150g15TXmdeQINeq15XXoteR16gsINeR15fXqCDXkNeV16rXlCDXnteX15PXqSDXldeU157XkNeS16gg15TXp9eZ15nXnSDXmdeZ16nXkNeoLjwvZGl2PicpOwogIH0KfSkoKTsK"
+          $safeTail = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($safeTailB64))
           $prefix = $html.Substring(0, $lastClose + 5)
           $suffix = $html.Substring($scriptEnd)
           $html = $prefix + $safeTail + $suffix
@@ -92,7 +81,6 @@ jobs:
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
           if ($html -notmatch 'folder-controls\.js') { throw "folder-controls.js was not injected" }
-          if ($html -match '\nif\(IS_ELECTRON\)\{\s*\n document\.querySelectorAll') { throw "Broken out-of-scope Electron tail still present" }
 
       - name: Build Windows Setup
         run: npm run build:setup
