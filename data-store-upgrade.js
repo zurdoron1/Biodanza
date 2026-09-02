@@ -5,12 +5,13 @@ let __playerDataSaveTimer = null;
 let __playerDataWriteQueue = Promise.resolve();
 
 function __refreshAfterPlayerDataLoad(){
+  try { if (typeof populateCharacterizedFilters === 'function') populateCharacterizedFilters(); } catch {}
+  try { if (typeof renderCharacterizedDb === 'function') renderCharacterizedDb(); } catch {}
   try { if (typeof renderRows === 'function') renderRows(); } catch {}
   try { if (typeof renderChosen === 'function') renderChosen(); } catch {}
   try { if (typeof renderActiveLibrary === 'function') renderActiveLibrary(); } catch {}
   try { if (typeof renderExportMatches === 'function') renderExportMatches(); } catch {}
-  try { if (typeof renderCharacterizedDB === 'function') renderCharacterizedDB(); } catch {}
-  try { if (typeof updateCharacterizedCount === 'function') updateCharacterizedCount(); } catch {}
+  try { if (typeof renderExportSequence === 'function') renderExportSequence(); } catch {}
 }
 
 function __writePlayerDataNow(){
@@ -60,6 +61,8 @@ async function __restorePlayerDataFromDisk(){
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen)); } catch {}
       __refreshAfterPlayerDataLoad();
+      const characterized = typeof characterizedRows === 'function' ? characterizedRows().length : Object.keys(state.annotations || {}).length;
+      try { showToast(`מאגר האפיונים נטען: ${characterized} שירים מאופיינים`); } catch {}
       return;
     }
 
@@ -70,6 +73,7 @@ async function __restorePlayerDataFromDisk(){
       if (!result?.ok) throw new Error(result?.error || 'העברת המאגר לאחסון החדש נכשלה');
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen || [])); } catch {}
+      __refreshAfterPlayerDataLoad();
       try { showToast('מאגר האפיונים הועבר לאחסון החדש ללא מגבלת localStorage.'); } catch {}
     }
   } catch (error) {
