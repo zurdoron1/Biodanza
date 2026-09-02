@@ -12,10 +12,6 @@
     if (v && typeof v==='object') return Object.keys(v).length>0;
     return v!=='' && v!==null && v!==undefined && v!==false && v!==0;
   }
-  function richness(a){
-    if(!a || typeof a!=='object') return 0;
-    return Object.entries(a).reduce((n,[k,v])=>n+(meaningful(v)?1:0),0);
-  }
   function mergeAnnotation(dst,src){
     if(!src || typeof src!=='object') return dst||{};
     if(!dst || typeof dst!=='object') return JSON.parse(JSON.stringify(src));
@@ -87,7 +83,6 @@
     try{
       const sources=await collectSources();
       const merged={};
-      // Merge richer sources first, then fill missing fields from the others.
       sources.sort((x,y)=>Object.keys(y.db||{}).length-Object.keys(x.db||{}).length);
       for(const s of sources) mergeDb(merged,s.db);
       const allEntries=Object.entries(merged);
@@ -107,7 +102,7 @@
       const profiles={};
       for(const [key,a] of usefulEntries) profiles[key]=profileFor(key,a,byKey.get(key));
       const payload={
-        type:'biodanza-transfer-package',version:2,appVersion:'5.4.8-recovery',createdAt:new Date().toISOString(),
+        type:'biodanza-transfer-package',version:2,appVersion:'5.5.0-recovery',createdAt:new Date().toISOString(),
         annotations:merged,
         chosen:Array.isArray(state.chosen)?state.chosen:[],
         playlistName:state.playlistName||'',
@@ -116,10 +111,42 @@
         recoveryInfo:{sourceCounts:Object.fromEntries(sources.map(s=>[s.name,Object.keys(s.db||{}).length])),totalRecords:allEntries.length,characterizedRecords:usefulEntries.length}
       };
       download('Biodanza_Transfer_RECOVERED_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(payload,null,2),'application/json;charset=utf-8');
-      alert(`חבילת המעבר נוצרה בהצלחה.\n\nשירים מאופיינים: ${usefulEntries.length}\nכל הרשומות שנשמרו: ${allEntries.length}\n\nבמחשב החדש יש לייבא את הקובץ שמתחיל ב־Biodanza_Transfer_RECOVERED_.`);
+      alert(`חבילת המעבר נוצרה בהצלחה.\n\nשירים עם אפיון מפורט: ${usefulEntries.length}\nכל הרשומות שנשמרו: ${allEntries.length}\n\nבמחשב החדש יש לייבא את הקובץ שמתחיל ב־Biodanza_Transfer_RECOVERED_.`);
     }catch(e){
       console.error(e);
       alert('יצירת חבילת החילוץ נכשלה: '+(e?.message||e));
     }finally{btn.disabled=false;}
   };
 })();
+
+// 5.5.0: the central database is the complete saved database, not only records
+// that currently satisfy the detailed-characterization predicate.
+function __allSavedAnnotationRows(){
+  const loadedByKey=new Map(state.tracks.map((t,i)=>[t.key,{t,i}]));
+  return Object.entries(state.annotations||{}).map(([key,a])=>{
+    const loaded=loadedByKey.get(key)||null;
+    const fallbackName=typeof fileNameFromAnnotationKey==='function'?fileNameFromAnnotationKey(key):String(key).split('|')[0]||'';
+    return {key,a:a||{},t:loaded?.t||null,i:loaded?.i??-1,available:Boolean(loaded),fallbackName};
+  });
+}
+characterizedRows = function(){ return __allSavedAnnotationRows(); };
+countCharacterizedLoadedTracks = function(){
+  return state.tracks.reduce((count,t)=>count+(state.annotations&&state.annotations[t.key]?1:0),0);
+};
+const __renderCharacterizedDbBefore550 = renderCharacterizedDb;
+renderCharacterizedDb = function(){
+  __renderCharacterizedDbBefore550();
+  try{
+    const all=__allSavedAnnotationRows();
+    const detailed=all.filter(x=>typeof isCharacterizedAnnotation==='function'&&isCharacterizedAnnotation(x.a)).length;
+    const available=all.filter(x=>x.available).length;
+    const count=document.getElementById('characterizedDbCount');
+    const q=String(document.getElementById('characterizedDbSearch')?.value||'').trim();
+    const main=String(document.getElementById('characterizedDbMain')?.value||'');
+    const sub=String(document.getElementById('characterizedDbSub')?.value||'');
+    if(count&&!q&&!main&&!sub) count.textContent=`${all.length} רשומות במאגר · ${detailed} עם אפיון מפורט · ${available} זמינות כעת להשמעה`;
+  }catch(error){console.warn('5.5 database display count failed',error)}
+};
+try{populateCharacterizedFilters()}catch{}
+try{renderCharacterizedDb()}catch{}
+try{if(typeof renderExportMatches==='function')renderExportMatches()}catch{}
