@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rebuild index.html
+      - name: Rebuild and patch index.html
         shell: pwsh
         run: |
           $parts = @(
@@ -30,7 +30,60 @@ jobs:
           $gzip.CopyTo($out)
           $gzip.Dispose(); $out.Dispose(); $in.Dispose()
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
+
           $html = Get-Content index.html -Raw
+          $marker = "`n`nlet audioCtx,sourceNode,compressor;"
+          $folderFix = @'
+
+// Electron folder controls — early binding safety net (5.4.1)
+if (IS_ELECTRON) {
+  const chooseBtnEarly = $('choosePersistentFolder');
+  const reopenBtnEarly = $('reopenPreviousFolder');
+
+  if (chooseBtnEarly) {
+    chooseBtnEarly.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      try {
+        $('loadStatus').textContent = 'פותח חלון לבחירת תיקיית מוזיקה…';
+        if (!window.electronAPI?.chooseMusicFolder) throw new Error('Electron bridge is unavailable');
+        const payload = await window.electronAPI.chooseMusicFolder();
+        if (payload?.canceled) {
+          $('loadStatus').textContent = 'בחירת התיקייה בוטלה.';
+          return;
+        }
+        loadElectronLibrary(payload);
+      } catch (err) {
+        console.error('chooseMusicFolder failed', err);
+        $('loadStatus').textContent = 'שגיאה בפתיחת תיקיית המוזיקה.';
+        alert('לא ניתן לפתוח את חלון בחירת התיקייה.\n\n' + (err?.message || err));
+      }
+    }, true);
+  }
+
+  if (reopenBtnEarly) {
+    reopenBtnEarly.disabled = false;
+    reopenBtnEarly.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      try {
+        $('loadStatus').textContent = 'פותח את תיקיית המוזיקה הקודמת…';
+        if (!window.electronAPI?.reopenMusicFolder) throw new Error('Electron bridge is unavailable');
+        const payload = await window.electronAPI.reopenMusicFolder();
+        loadElectronLibrary(payload);
+      } catch (err) {
+        console.error('reopenMusicFolder failed', err);
+        $('loadStatus').textContent = 'שגיאה בפתיחת התיקייה הקודמת.';
+        alert('לא ניתן לפתוח את תיקיית המוזיקה הקודמת.\n\n' + (err?.message || err));
+      }
+    }, true);
+  }
+}
+'@
+          if ($html -notmatch 'early binding safety net') {
+            if (-not $html.Contains($marker)) { throw "Folder-fix insertion marker not found" }
+            $html = $html.Replace($marker, $folderFix + $marker)
+          }
           if ($html -notmatch 'language-update\.js') {
             $html = $html -replace '</body>', '<script src="language-update.js"></script></body>'
           }
@@ -61,12 +114,12 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.0.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.1.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.0
-          path: dist/Biodanza Music Player Setup 5.4.0.exe
+          name: Biodanza-Music-Player-Setup-5.4.1
+          path: dist/Biodanza Music Player Setup 5.4.1.exe
