@@ -32,13 +32,32 @@ jobs:
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
 
           $html = Get-Content index.html -Raw
-          $needle = "function loadElectronLibrary(payload){"
-          if (-not $html.Contains($needle)) { throw "loadElectronLibrary not found" }
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
           if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
           if ($html -notmatch '__biodanzaLoadElectronLibrary') {
             $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
           }
+
+          # Remove the broken tail that references IIFE-scoped IS_ELECTRON and $ after the IIFE has closed.
+          $lastClose = $html.LastIndexOf('})();')
+          $scriptEnd = $html.IndexOf('</script>', $lastClose)
+          if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
+          $safeTail = @"
+
+(() => {
+  const isElectron = Boolean(window.electronAPI?.isElectron);
+  if (!isElectron) return;
+  document.querySelectorAll('label[for="folder"],label[for="files"]').forEach(el => el.style.display='none');
+  const top = document.getElementById('electronLibraryStatus');
+  if (top && !document.getElementById('electronFolderHint')) {
+    top.insertAdjacentHTML('afterend','<div id="electronFolderHint" class="small" style="width:100%;margin-top:4px">Electron שומר את מיקום התיקייה. אם היא תועבר, בחר אותה מחדש והמאגר הקיים יישאר.</div>');
+  }
+})();
+"@
+          $prefix = $html.Substring(0, $lastClose + 5)
+          $suffix = $html.Substring($scriptEnd)
+          $html = $prefix + $safeTail + $suffix
+
           if ($html -notmatch 'folder-controls\.js') {
             $html = $html -replace '</body>', '<script src="folder-controls.js"></script></body>'
           }
@@ -67,19 +86,27 @@ jobs:
           node --check language-update.js
           node --check relink-upgrade.js
 
+      - name: Verify patched index markers
+        shell: pwsh
+        run: |
+          $html = Get-Content index.html -Raw
+          if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
+          if ($html -notmatch 'folder-controls\.js') { throw "folder-controls.js was not injected" }
+          if ($html -match '\nif\(IS_ELECTRON\)\{\s*\n document\.querySelectorAll') { throw "Broken out-of-scope Electron tail still present" }
+
       - name: Build Windows Setup
         run: npm run build:setup
 
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.2.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.3.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.2
-          path: dist/Biodanza Music Player Setup 5.4.2.exe
+          name: Biodanza-Music-Player-Setup-5.4.3
+          path: dist/Biodanza Music Player Setup 5.4.3.exe
           if-no-files-found: error
