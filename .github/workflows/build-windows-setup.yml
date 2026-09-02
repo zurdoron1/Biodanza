@@ -1,6 +1,8 @@
 name: Build Biodanza Windows Setup
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -28,10 +30,12 @@ jobs:
           $gzip.CopyTo($out)
           $gzip.Dispose(); $out.Dispose(); $in.Dispose()
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
+          $html = Get-Content index.html -Raw
+          if ($html -notmatch 'language-update\.js') {
+            $html = $html -replace '</body>', '<script src="language-update.js"></script></body>'
+            Set-Content index.html -Value $html -Encoding UTF8
+          }
           Write-Host "index.html size: $((Get-Item index.html).Length)"
-
-      - name: Apply 5.3 language update
-        run: git apply --unsafe-paths index-language.patch
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,6 +44,12 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Syntax checks
+        run: |
+          node --check main.js
+          node --check preload.js
+          node --check language-update.js
 
       - name: Build Windows Setup
         run: npm run build:setup
