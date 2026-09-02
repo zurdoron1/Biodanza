@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
   },
   writePlaylist: (filename, content) => ipcRenderer.invoke('music:write-playlist', filename, content),
+  readPlayerData: () => ipcRenderer.invoke('player-data:read'),
+  writePlayerData: (data) => ipcRenderer.invoke('player-data:write', data),
   openPath: (targetPath) => ipcRenderer.invoke('system:open-path', targetPath),
   showItemInFolder: (targetPath) => ipcRenderer.invoke('system:show-item', targetPath),
   lookupLyrics: (meta) => ipcRenderer.invoke('lyrics:lookup', meta)
