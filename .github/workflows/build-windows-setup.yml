@@ -39,19 +39,6 @@ jobs:
             $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
           }
 
-          $mainLine = " $('mainWorkspace').classList.toggle('hidden',name!=='main');"
-          $mainReplacement = " $('mainWorkspace').classList.toggle('hidden',name!=='main');`n $('mainWorkspace').style.setProperty('display',name==='main'?'block':'none','important');`n $('activeWorkspace').classList.toggle('hidden',name!=='active');`n $('activeWorkspace').style.setProperty('display',name==='active'?'block':'none','important');"
-          if (-not $html.Contains($mainLine)) { throw "switchWorkspace main line not found" }
-          $html = $html.Replace($mainLine, $mainReplacement)
-
-          $exportLine = " $('exportWorkspace').classList.toggle('hidden',name!=='export');"
-          $exportReplacement = " $('exportWorkspace').classList.toggle('hidden',name!=='export');`n $('exportWorkspace').style.setProperty('display',name==='export'?'block':'none','important');"
-          $html = $html.Replace($exportLine, $exportReplacement)
-
-          $advancedLine = " $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');"
-          $advancedReplacement = " $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');`n $('advancedWorkspace').style.setProperty('display',name==='advanced'?'block':'none','important');"
-          $html = $html.Replace($advancedLine, $advancedReplacement)
-
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
@@ -80,7 +67,7 @@ jobs:
 
           $bodyEnd = $html.LastIndexOf('</body>')
           if ($bodyEnd -lt 0) { throw "Final body tag not found" }
-          $inject = '<script src="folder-controls.js"></script><script src="language-update.js"></script>'
+          $inject = '<script src="folder-controls.js"></script><script src="workspace-controls.js"></script><script src="language-update.js"></script>'
           $html = $html.Substring(0, $bodyEnd) + $inject + $html.Substring($bodyEnd)
 
           $scriptStart = $html.IndexOf('<script>')
@@ -104,6 +91,7 @@ jobs:
           node --check main.js
           node --check preload.js
           node --check folder-controls.js
+          node --check workspace-controls.js
           node --check language-update.js
           node --check relink-upgrade.js
           node --check inline-main.js
@@ -116,8 +104,7 @@ jobs:
           if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
           if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
           if ($html -match '<script src="relink-upgrade.js"></script>') { throw "Relink script must not be external" }
-          if (($html | Select-String -Pattern '<script src="folder-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "folder-controls injection count is not 1" }
-          if (($html | Select-String -Pattern '<script src="language-update.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "language-update injection count is not 1" }
+          if (($html | Select-String -Pattern '<script src="workspace-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "workspace-controls injection count is not 1" }
 
       - name: Build Windows Setup
         run: npm run build:setup
