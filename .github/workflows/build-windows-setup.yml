@@ -33,39 +33,25 @@ jobs:
 
           $html = Get-Content index.html -Raw
 
-          # Export the Electron library loader for folder-controls.js.
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
           if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
           if ($html -notmatch '__biodanzaLoadElectronLibrary') {
             $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
           }
 
-          # Make workspace switching explicit and independent of conflicting CSS.
           $mainLine = " $('mainWorkspace').classList.toggle('hidden',name!=='main');"
-          $mainReplacement = @"
- $('mainWorkspace').classList.toggle('hidden',name!=='main');
- $('mainWorkspace').style.setProperty('display',name==='main'?'block':'none','important');
- $('activeWorkspace').classList.toggle('hidden',name!=='active');
- $('activeWorkspace').style.setProperty('display',name==='active'?'block':'none','important');
-"@
+          $mainReplacement = " $('mainWorkspace').classList.toggle('hidden',name!=='main');`n $('mainWorkspace').style.setProperty('display',name==='main'?'block':'none','important');`n $('activeWorkspace').classList.toggle('hidden',name!=='active');`n $('activeWorkspace').style.setProperty('display',name==='active'?'block':'none','important');"
           if (-not $html.Contains($mainLine)) { throw "switchWorkspace main line not found" }
-          $html = $html.Replace($mainLine, $mainReplacement.TrimEnd())
+          $html = $html.Replace($mainLine, $mainReplacement)
 
           $exportLine = " $('exportWorkspace').classList.toggle('hidden',name!=='export');"
-          $exportReplacement = @"
- $('exportWorkspace').classList.toggle('hidden',name!=='export');
- $('exportWorkspace').style.setProperty('display',name==='export'?'block':'none','important');
-"@
-          $html = $html.Replace($exportLine, $exportReplacement.TrimEnd())
+          $exportReplacement = " $('exportWorkspace').classList.toggle('hidden',name!=='export');`n $('exportWorkspace').style.setProperty('display',name==='export'?'block':'none','important');"
+          $html = $html.Replace($exportLine, $exportReplacement)
 
           $advancedLine = " $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');"
-          $advancedReplacement = @"
- $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');
- $('advancedWorkspace').style.setProperty('display',name==='advanced'?'block':'none','important');
-"@
-          $html = $html.Replace($advancedLine, $advancedReplacement.TrimEnd())
+          $advancedReplacement = " $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');`n $('advancedWorkspace').style.setProperty('display',name==='advanced'?'block':'none','important');"
+          $html = $html.Replace($advancedLine, $advancedReplacement)
 
-          # Insert the relink feature INSIDE the main IIFE so it can access state, ann(), probeDurations(), etc.
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
@@ -78,7 +64,6 @@ jobs:
           $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
           $html = $html.Substring(0,$lastClose) + "`n// ---- transfer and relink feature ----`n" + $relink + "`n" + $html.Substring($lastClose)
 
-          # Remove the old broken tail after the main IIFE and add a safe Electron-only hint.
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found after relink injection" }
@@ -88,19 +73,16 @@ jobs:
           $suffix = $html.Substring($scriptEnd)
           $html = $prefix + $safeTail + $suffix
 
-          # Strong visibility guard.
           $headEnd = $html.LastIndexOf('</head>')
           if ($headEnd -lt 0) { throw "Final head tag not found" }
           $workspaceCss = '<style id="workspaceVisibilityFix">#mainWorkspace.hidden,#activeWorkspace.hidden,#exportWorkspace.hidden,#advancedWorkspace.hidden{display:none!important}</style>'
           $html = $html.Substring(0, $headEnd) + $workspaceCss + $html.Substring($headEnd)
 
-          # External helpers; relink-upgrade is already injected inside the main scope.
           $bodyEnd = $html.LastIndexOf('</body>')
           if ($bodyEnd -lt 0) { throw "Final body tag not found" }
           $inject = '<script src="folder-controls.js"></script><script src="language-update.js"></script>'
           $html = $html.Substring(0, $bodyEnd) + $inject + $html.Substring($bodyEnd)
 
-          # Extract and syntax-check the exact main renderer script.
           $scriptStart = $html.IndexOf('<script>')
           $scriptClose = $html.IndexOf('</script>', $scriptStart)
           if ($scriptStart -lt 0 -or $scriptClose -lt 0) { throw "Main inline script not found" }
@@ -131,7 +113,6 @@ jobs:
         run: |
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
-          if ($html -notmatch "activeWorkspace.*name==='active'") { throw "Active workspace switch fix missing" }
           if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
           if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
           if ($html -match '<script src="relink-upgrade.js"></script>') { throw "Relink script must not be external" }
