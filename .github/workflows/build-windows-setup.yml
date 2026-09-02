@@ -33,8 +33,11 @@ jobs:
           $html = Get-Content index.html -Raw
           if ($html -notmatch 'language-update\.js') {
             $html = $html -replace '</body>', '<script src="language-update.js"></script></body>'
-            Set-Content index.html -Value $html -Encoding UTF8
           }
+          if ($html -notmatch 'relink-upgrade\.js') {
+            $html = $html -replace '</body>', '<script src="relink-upgrade.js"></script></body>'
+          }
+          Set-Content index.html -Value $html -Encoding UTF8
           Write-Host "index.html size: $((Get-Item index.html).Length)"
 
       - name: Setup Node.js
@@ -50,6 +53,7 @@ jobs:
           node --check main.js
           node --check preload.js
           node --check language-update.js
+          node --check relink-upgrade.js
 
       - name: Build Windows Setup
         run: npm run build:setup
@@ -57,12 +61,12 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.3.0.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.0.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.3.0
-          path: dist/Biodanza Music Player Setup 5.3.0.exe
+          name: Biodanza-Music-Player-Setup-5.4.0
+          path: dist/Biodanza Music Player Setup 5.4.0.exe
