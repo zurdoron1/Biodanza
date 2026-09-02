@@ -13,6 +13,9 @@ function appDataDir() {
   return dir;
 }
 function configPath() { return path.join(appDataDir(), 'config.json'); }
+function playerDataPath() { return path.join(appDataDir(), 'player-data.json'); }
+function playerDataBackupPath() { return path.join(appDataDir(), 'player-data.backup.json'); }
+
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); }
   catch { return {}; }
@@ -27,6 +30,54 @@ function setLibraryRoot(rootPath) {
   writeConfig(cfg);
 }
 function getLibraryRoot() { return readConfig().libraryRoot || ''; }
+
+async function readPlayerData() {
+  try {
+    const raw = await fsp.readFile(playerDataPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      ok: true,
+      exists: true,
+      annotations: parsed && typeof parsed.annotations === 'object' && parsed.annotations ? parsed.annotations : {},
+      chosen: Array.isArray(parsed?.chosen) ? parsed.chosen : [],
+      updatedAt: parsed?.updatedAt || ''
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { ok: true, exists: false, annotations: {}, chosen: [] };
+    return { ok: false, exists: false, annotations: {}, chosen: [], error: String(error?.message || error) };
+  }
+}
+
+async function writePlayerData(data = {}) {
+  const annotations = data && typeof data.annotations === 'object' && data.annotations ? data.annotations : {};
+  const chosen = Array.isArray(data?.chosen) ? data.chosen : [];
+  const payload = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    annotations,
+    chosen
+  };
+  const json = JSON.stringify(payload);
+  const target = playerDataPath();
+  const backup = playerDataBackupPath();
+  const temp = target + '.tmp';
+  try {
+    if (fs.existsSync(target)) {
+      try { await fsp.copyFile(target, backup); } catch {}
+    }
+    await fsp.writeFile(temp, json, 'utf8');
+    try {
+      await fsp.rename(temp, target);
+    } catch {
+      await fsp.copyFile(temp, target);
+      try { await fsp.unlink(temp); } catch {}
+    }
+    return { ok: true, bytes: Buffer.byteLength(json, 'utf8'), path: target };
+  } catch (error) {
+    try { await fsp.unlink(temp); } catch {}
+    return { ok: false, error: String(error?.message || error) };
+  }
+}
 
 async function scanFolder(rootPath) {
   const files = [];
@@ -133,6 +184,10 @@ app.whenReady().then(() => {
     await fsp.writeFile(target, '\uFEFF' + String(content || ''), 'utf8');
     return { ok: true, path: target };
   });
+
+  ipcMain.handle('player-data:read', async () => readPlayerData());
+  ipcMain.handle('player-data:write', async (_event, data) => writePlayerData(data));
+
   ipcMain.handle('system:open-path', async (_event, targetPath) => {
     const err = await shell.openPath(targetPath);
     return { ok: !err, error: err || '' };
@@ -155,7 +210,7 @@ app.whenReady().then(() => {
       const response = await fetch('https://lrclib.net/api/get?' + params.toString(), {
         headers: {
           Accept: 'application/json',
-          'Lrclib-Client': 'Biodanza Music Player 5.3 (https://github.com/zurdoron1/Biodanza)'
+          'Lrclib-Client': 'Biodanza Music Player 5.4.7 (https://github.com/zurdoron1/Biodanza)'
         }
       });
       if (response.status === 404) return null;
