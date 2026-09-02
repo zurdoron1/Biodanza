@@ -6,12 +6,13 @@
   }
   async function applyPayload(payload){
     if(!payload || payload.canceled) return;
-    if(typeof window.__biodanzaLoadElectronLibrary === 'function'){
-      window.__biodanzaLoadElectronLibrary(payload);
+    const loader = window.__biodanzaLoadElectronLibrary;
+    if(typeof loader === 'function'){
+      loader(payload);
       return;
     }
-    setStatus('שגיאה: מנגנון טעינת הספרייה לא הושלם.', true);
-    alert('בחירת התיקייה הצליחה, אך מנגנון טעינת השירים לא נטען.');
+    setStatus('שגיאה: פונקציית טעינת הספרייה אינה זמינה.', true);
+    alert('חלון בחירת התיקייה פעל, אך טעינת הספרייה אינה זמינה.');
   }
   async function choose(){
     try{
@@ -38,25 +39,29 @@
       alert('לא ניתן לפתוח את תיקיית המוזיקה הקודמת.\n\n' + (err?.message || err));
     }
   }
-  function bind(){
+  function prepare(){
     const chooseBtn=byId('choosePersistentFolder');
     const reopenBtn=byId('reopenPreviousFolder');
-    if(chooseBtn){
-      chooseBtn.disabled=false;
-      chooseBtn.onclick=null;
-      chooseBtn.addEventListener('click', e=>{e.preventDefault();e.stopImmediatePropagation();choose();}, true);
-    }
-    if(reopenBtn){
-      reopenBtn.disabled=false;
-      reopenBtn.onclick=null;
-      reopenBtn.addEventListener('click', e=>{e.preventDefault();e.stopImmediatePropagation();reopen();}, true);
-    }
+    if(chooseBtn) chooseBtn.disabled=false;
+    if(reopenBtn) reopenBtn.disabled=false;
     if(window.electronAPI?.isElectron){
-      setStatus('Electron מחובר — אפשר לבחור תיקיית מוזיקה.');
+      setStatus('Electron מחובר — בחירת תיקייה פעילה.');
     }else{
       setStatus('Electron לא מחובר — preload לא נטען.', true);
     }
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind, {once:true});
-  else bind();
+
+  // Delegated capture handler: runs before target-level handlers in the main app.
+  document.addEventListener('click', (e) => {
+    const target = e.target?.closest?.('#choosePersistentFolder,#reopenPreviousFolder');
+    if(!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if(target.id === 'choosePersistentFolder') choose();
+    else reopen();
+  }, true);
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', prepare, {once:true});
+  else prepare();
 })();
