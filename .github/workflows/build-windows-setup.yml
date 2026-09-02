@@ -32,8 +32,6 @@ jobs:
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
 
           $html = Get-Content index.html -Raw
-
-          # Any remaining legacy localStorage annotation writes must never be allowed to crash the renderer.
           $html = $html.Replace("localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));", "try{localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));}catch{}")
 
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
@@ -46,7 +44,6 @@ jobs:
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
 
-          # Feature code runs inside the original renderer IIFE so it can access state and helper functions.
           $relink = Get-Content relink-upgrade.js -Raw
           $relink = $relink.Replace("const headerToolbar = document.querySelector('#topCard header .toolbar');", "const headerToolbar = document.querySelector('#advancedHost') || document.querySelector('#topCard header .toolbar');")
           $relink = $relink.Replace("const topCard = `$id('topCard');", "const topCard = `$id('advancedHost') || `$id('topCard');")
@@ -54,32 +51,9 @@ jobs:
           $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.4.9'")
           $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
 
-          # Recovery packages do not always have duration/fingerprint. Give filename + file size enough weight to relink safely.
           $scoreNeedle = "let score=0; const reasons=[];"
-          $scorePatch = @"
-          let score=0; const reasons=[];
-          const oldName = String(p.fileName || fallbackName(p.oldKey || '') || '');
-          const newName = String(t.file?.name || '');
-          const nameSim = similarity(oldName, newName);
-          const oldSize = Number(p.size) || Number(String(p.oldKey || '').split('|')[1]) || 0;
-          const newSize = Number(t.file?.size) || 0;
-          const sizeRatio = oldSize && newSize ? Math.abs(oldSize-newSize)/Math.max(oldSize,newSize) : 1;
-          const exactNormalizedName = !!oldName && !!newName && norm(oldName) === norm(newName);
-          if(exactNormalizedName && oldSize && newSize && oldSize===newSize){
-            score += 92; reasons.push('שם קובץ וגודל זהים');
-          } else if(nameSim>=0.98 && sizeRatio<=0.005){
-            score += 86; reasons.push('שם קובץ כמעט זהה וגודל תואם');
-          } else {
-            if(nameSim>=0.95){ score += 48; reasons.push('שם קובץ קרוב מאוד'); }
-            else if(nameSim>=0.85){ score += 34; reasons.push('שם קובץ דומה'); }
-            else if(nameSim>=0.72){ score += 20; }
-            if(oldSize && newSize){
-              if(oldSize===newSize){ score += 36; reasons.push('גודל קובץ זהה'); }
-              else if(sizeRatio<=0.005){ score += 30; reasons.push('גודל כמעט זהה'); }
-              else if(sizeRatio<=0.02){ score += 18; }
-            }
-          }
-"@
+          $scorePatchB64 = "bGV0IHNjb3JlPTA7IGNvbnN0IHJlYXNvbnM9W107CmNvbnN0IG9sZE5hbWUgPSBTdHJpbmcocC5maWxlTmFtZSB8fCBmYWxsYmFja05hbWUocC5vbGRLZXkgfHwgJycpIHx8ICcnKTsKY29uc3QgbmV3TmFtZSA9IFN0cmluZyh0LmZpbGU/Lm5hbWUgfHwgJycpOwpjb25zdCBuYW1lU2ltID0gc2ltaWxhcml0eShvbGROYW1lLCBuZXdOYW1lKTsKY29uc3Qgb2xkU2l6ZSA9IE51bWJlcihwLnNpemUpIHx8IE51bWJlcihTdHJpbmcocC5vbGRLZXkgfHwgJycpLnNwbGl0KCd8JylbMV0pIHx8IDA7CmNvbnN0IG5ld1NpemUgPSBOdW1iZXIodC5maWxlPy5zaXplKSB8fCAwOwpjb25zdCBzaXplUmF0aW8gPSBvbGRTaXplICYmIG5ld1NpemUgPyBNYXRoLmFicyhvbGRTaXplLW5ld1NpemUpL01hdGgubWF4KG9sZFNpemUsbmV3U2l6ZSkgOiAxOwpjb25zdCBleGFjdE5vcm1hbGl6ZWROYW1lID0gISFvbGROYW1lICYmICEhbmV3TmFtZSAmJiBub3JtKG9sZE5hbWUpID09PSBub3JtKG5ld05hbWUpOwppZihleGFjdE5vcm1hbGl6ZWROYW1lICYmIG9sZFNpemUgJiYgbmV3U2l6ZSAmJiBvbGRTaXplPT09bmV3U2l6ZSl7CiAgc2NvcmUgKz0gOTI7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXldeS15XXk9ecINeW15TXmdedJyk7Cn0gZWxzZSBpZihuYW1lU2ltPj0wLjk4ICYmIHNpemVSYXRpbzw9MC4wMDUpewogIHNjb3JlICs9IDg2OyByZWFzb25zLnB1c2goJ9ep150g16fXldeR16Ug15vXntei15gg15bXlNeUINeV15LXldeT15wg16rXldeQ150nKTsKfSBlbHNlIHsKICBpZihuYW1lU2ltPj0wLjk1KXsgc2NvcmUgKz0gNDg7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXp9eo15XXkSDXnteQ15XXkycpOyB9CiAgZWxzZSBpZihuYW1lU2ltPj0wLjg1KXsgc2NvcmUgKz0gMzQ7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXk9eV157XlCcpOyB9CiAgZWxzZSBpZihuYW1lU2ltPj0wLjcyKXsgc2NvcmUgKz0gMjA7IH0KICBpZihvbGRTaXplICYmIG5ld1NpemUpewogICAgaWYob2xkU2l6ZT09PW5ld1NpemUpeyBzY29yZSArPSAzNjsgcmVhc29ucy5wdXNoKCfXkteV15PXnCDXp9eV15HXpSDXlteU15QnKTsgfQogICAgZWxzZSBpZihzaXplUmF0aW88PTAuMDA1KXsgc2NvcmUgKz0gMzA7IHJlYXNvbnMucHVzaCgn15LXldeT15wg15vXntei15gg15bXlNeUJyk7IH0KICAgIGVsc2UgaWYoc2l6ZVJhdGlvPD0wLjAyKXsgc2NvcmUgKz0gMTg7IH0KICB9Cn0K"
+          $scorePatch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($scorePatchB64))
           if (-not $relink.Contains($scoreNeedle)) { throw "Relink score marker not found" }
           $relink = $relink.Replace($scoreNeedle, $scorePatch)
 
