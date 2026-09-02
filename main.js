@@ -142,6 +142,41 @@ app.whenReady().then(() => {
     return { ok: true };
   });
 
+  ipcMain.handle('lyrics:lookup', async (_event, meta = {}) => {
+    const trackName = String(meta.trackName || '').trim();
+    const artistName = String(meta.artistName || '').trim();
+    if (!trackName || !artistName) return null;
+    const params = new URLSearchParams({ track_name: trackName, artist_name: artistName });
+    const albumName = String(meta.albumName || '').trim();
+    const duration = Math.round(Number(meta.duration) || 0);
+    if (albumName) params.set('album_name', albumName);
+    if (duration >= 1 && duration <= 3600) params.set('duration', String(duration));
+    try {
+      const response = await fetch('https://lrclib.net/api/get?' + params.toString(), {
+        headers: {
+          Accept: 'application/json',
+          'Lrclib-Client': 'Biodanza Music Player 5.3 (https://github.com/zurdoron1/Biodanza)'
+        }
+      });
+      if (response.status === 404) return null;
+      if (response.status === 429) return { rateLimited: true };
+      if (!response.ok) return null;
+      const data = await response.json();
+      return {
+        id: data.id || '',
+        instrumental: !!data.instrumental,
+        plainLyrics: String(data.plainLyrics || ''),
+        trackName: String(data.trackName || data.name || ''),
+        artistName: String(data.artistName || ''),
+        albumName: String(data.albumName || ''),
+        duration: Number(data.duration) || 0
+      };
+    } catch (error) {
+      console.warn('LRCLIB lookup failed', error);
+      return null;
+    }
+  });
+
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
