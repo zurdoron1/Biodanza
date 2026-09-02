@@ -32,12 +32,15 @@ jobs:
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
 
           $html = Get-Content index.html -Raw
-          $marker = "`n`nlet audioCtx,sourceNode,compressor;"
-          $fixB64 = "Ci8vIEVsZWN0cm9uIGZvbGRlciBjb250cm9scyDigJQgZWFybHkgYmluZGluZyBzYWZldHkgbmV0LgovLyBUaGVzZSBsaXN0ZW5lcnMgYXJlIGF0dGFjaGVkIGltbWVkaWF0ZWx5IGFmdGVyIHRoZSBmb2xkZXIgZnVuY3Rpb25zIGFyZSBkZWZpbmVkLAovLyBzbyBhIGxhdGVyIHJlbmRlcmVyIGVycm9yIGNhbm5vdCBsZWF2ZSB0aGUgdmlzaWJsZSBidXR0b25zIHdpdGhvdXQgYSBoYW5kbGVyLgppZiAoSVNfRUxFQ1RST04pIHsKICBjb25zdCBjaG9vc2VCdG5FYXJseSA9ICQoJ2Nob29zZVBlcnNpc3RlbnRGb2xkZXInKTsKICBjb25zdCByZW9wZW5CdG5FYXJseSA9ICQoJ3Jlb3BlblByZXZpb3VzRm9sZGVyJyk7CgogIGlmIChjaG9vc2VCdG5FYXJseSkgewogICAgY2hvb3NlQnRuRWFybHkuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLCBhc3luYyAoZXYpID0+IHsKICAgICAgZXYucHJldmVudERlZmF1bHQoKTsKICAgICAgZXYuc3RvcEltbWVkaWF0ZVByb3BhZ2F0aW9uKCk7CiAgICAgIHRyeSB7CiAgICAgICAgJCgnbG9hZFN0YXR1cycpLnRleHRDb250ZW50ID0gJ9ek15XXqteXINeX15zXldefINec15HXl9eZ16jXqiDXqteZ16fXmdeZ16og157XldeW15nXp9eU4oCmJzsKICAgICAgICBpZiAoIXdpbmRvdy5lbGVjdHJvbkFQST8uY2hvb3NlTXVzaWNGb2xkZXIpIHRocm93IG5ldyBFcnJvcignRWxlY3Ryb24gYnJpZGdlIGlzIHVuYXZhaWxhYmxlJyk7CiAgICAgICAgY29uc3QgcGF5bG9hZCA9IGF3YWl0IHdpbmRvdy5lbGVjdHJvbkFQSS5jaG9vc2VNdXNpY0ZvbGRlcigpOwogICAgICAgIGlmIChwYXlsb2FkPy5jYW5jZWxlZCkgewogICAgICAgICAgJCgnbG9hZFN0YXR1cycpLnRleHRDb250ZW50ID0gJ9eR15fXmdeo16og15TXqteZ16fXmdeZ15Qg15HXldeY15zXlC4nOwogICAgICAgICAgcmV0dXJuOwogICAgICAgIH0KICAgICAgICBsb2FkRWxlY3Ryb25MaWJyYXJ5KHBheWxvYWQpOwogICAgICB9IGNhdGNoIChlcnIpIHsKICAgICAgICBjb25zb2xlLmVycm9yKCdjaG9vc2VNdXNpY0ZvbGRlciBmYWlsZWQnLCBlcnIpOwogICAgICAgICQoJ2xvYWRTdGF0dXMnKS50ZXh0Q29udGVudCA9ICfXqdeS15nXkNeUINeR16TXqteZ15fXqiDXqteZ16fXmdeZ16og15TXnteV15bXmden15QuJzsKICAgICAgICBhbGVydCgn15zXkCDXoNeZ16rXnyDXnNek16rXldeXINeQ16og15fXnNeV158g15HXl9eZ16jXqiDXlNeq15nXp9eZ15nXlC5cblxuJyArIChlcnI/Lm1lc3NhZ2UgfHwgZXJyKSk7CiAgICAgIH0KICAgIH0sIHRydWUpOwogIH0KCiAgaWYgKHJlb3BlbkJ0bkVhcmx5KSB7CiAgICByZW9wZW5CdG5FYXJseS5kaXNhYmxlZCA9IGZhbHNlOwogICAgcmVvcGVuQnRuRWFybHkuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLCBhc3luYyAoZXYpID0+IHsKICAgICAgZXYucHJldmVudERlZmF1bHQoKTsKICAgICAgZXYuc3RvcEltbWVkaWF0ZVByb3BhZ2F0aW9uKCk7CiAgICAgIHRyeSB7CiAgICAgICAgJCgnbG9hZFN0YXR1cycpLnRleHRDb250ZW50ID0gJ9ek15XXqteXINeQ16og16rXmden15nXmdeqINeU157XldeW15nXp9eUINeU16fXldeT157XquKApic7CiAgICAgICAgaWYgKCF3aW5kb3cuZWxlY3Ryb25BUEk/LnJlb3Blbk11c2ljRm9sZGVyKSB0aHJvdyBuZXcgRXJyb3IoJ0VsZWN0cm9uIGJyaWRnZSBpcyB1bmF2YWlsYWJsZScpOwogICAgICAgIGNvbnN0IHBheWxvYWQgPSBhd2FpdCB3aW5kb3cuZWxlY3Ryb25BUEkucmVvcGVuTXVzaWNGb2xkZXIoKTsKICAgICAgICBsb2FkRWxlY3Ryb25MaWJyYXJ5KHBheWxvYWQpOwogICAgICB9IGNhdGNoIChlcnIpIHsKICAgICAgICBjb25zb2xlLmVycm9yKCdyZW9wZW5NdXNpY0ZvbGRlciBmYWlsZWQnLCBlcnIpOwogICAgICAgICQoJ2xvYWRTdGF0dXMnKS50ZXh0Q29udGVudCA9ICfXqdeS15nXkNeUINeR16TXqteZ15fXqiDXlNeq15nXp9eZ15nXlCDXlNen15XXk9ee16ouJzsKICAgICAgICBhbGVydCgn15zXkCDXoNeZ16rXnyDXnNek16rXldeXINeQ16og16rXmden15nXmdeqINeU157XldeW15nXp9eUINeU16fXldeT157Xqi5cblxuJyArIChlcnI/Lm1lc3NhZ2UgfHwgZXJyKSk7CiAgICAgIH0KICAgIH0sIHRydWUpOwogIH0KfQo="
-          $folderFix = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($fixB64))
-          if ($html -notmatch 'early binding safety net') {
-            if (-not $html.Contains($marker)) { throw "Folder-fix insertion marker not found" }
-            $html = $html.Replace($marker, $folderFix + $marker)
+          $needle = "function loadElectronLibrary(payload){"
+          if (-not $html.Contains($needle)) { throw "loadElectronLibrary not found" }
+          $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
+          if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
+          if ($html -notmatch '__biodanzaLoadElectronLibrary') {
+            $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
+          }
+          if ($html -notmatch 'folder-controls\.js') {
+            $html = $html -replace '</body>', '<script src="folder-controls.js"></script></body>'
           }
           if ($html -notmatch 'language-update\.js') {
             $html = $html -replace '</body>', '<script src="language-update.js"></script></body>'
@@ -60,6 +63,7 @@ jobs:
         run: |
           node --check main.js
           node --check preload.js
+          node --check folder-controls.js
           node --check language-update.js
           node --check relink-upgrade.js
 
@@ -69,12 +73,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.1.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.2.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.1
-          path: dist/Biodanza Music Player Setup 5.4.1.exe
+          name: Biodanza-Music-Player-Setup-5.4.2
+          path: dist/Biodanza Music Player Setup 5.4.2.exe
+          if-no-files-found: error
