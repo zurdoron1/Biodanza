@@ -48,7 +48,7 @@ jobs:
           $relink = $relink.Replace("const headerToolbar = document.querySelector('#topCard header .toolbar');", "const headerToolbar = document.querySelector('#advancedHost') || document.querySelector('#topCard header .toolbar');")
           $relink = $relink.Replace("const topCard = `$id('topCard');", "const topCard = `$id('advancedHost') || `$id('topCard');")
           $relink = $relink.Replace("importLabel.textContent = '📥 ייבא חבילת העברה';", "importLabel.textContent = '📥 ייבא חבילת העברה ושייך מחדש';")
-          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.5.0'")
+          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.5.1'")
           $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
 
           # Recovery packages can lack duration/fingerprint. Use filename + size as strong evidence.
@@ -58,9 +58,10 @@ jobs:
           if (-not $relink.Contains($scoreNeedle)) { throw "Relink score marker not found" }
           $relink = $relink.Replace($scoreNeedle, $scorePatch)
 
+          $relinkSafety = Get-Content relink-safety-upgrade.js -Raw
           $dataStore = Get-Content data-store-upgrade.js -Raw
           $recovery = Get-Content recovery-export.js -Raw
-          $insidePatch = "`n// ---- transfer and relink feature ----`n" + $relink + "`n// ---- file-backed player database ----`n" + $dataStore + "`n// ---- recovery/database upgrade ----`n" + $recovery + "`n"
+          $insidePatch = "`n// ---- transfer and relink feature ----`n" + $relink + "`n// ---- conservative relink safety 5.5.1 ----`n" + $relinkSafety + "`n// ---- file-backed player database ----`n" + $dataStore + "`n// ---- recovery/database upgrade ----`n" + $recovery + "`n"
           $html = $html.Substring(0,$lastClose) + $insidePatch + $html.Substring($lastClose)
 
           $lastClose = $html.LastIndexOf('})();')
@@ -106,6 +107,7 @@ jobs:
           node --check workspace-controls.js
           node --check language-update.js
           node --check relink-upgrade.js
+          node --check relink-safety-upgrade.js
           node --check data-store-upgrade.js
           node --check recovery-export.js
           node --check database-display-upgrade.js
@@ -119,6 +121,8 @@ jobs:
           if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
           if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
           if ($html -notmatch 'שם קובץ וגודל זהים') { throw "Recovery filename-size scoring patch missing" }
+          if ($html -notmatch 'מועמד מוצג רק כאשר קיימת ראיית זהות חזקה') { throw "Relink safety UI missing" }
+          if ($html -notmatch 'best.score>=70') { throw "Relink review threshold missing" }
           if ($html -notmatch '__allSavedAnnotationRows') { throw "Full central database display patch missing" }
           if ($html -notmatch '__restorePlayerDataFromDisk') { throw "File-backed data migration code missing" }
           if ($html -notmatch 'writePlayerData') { throw "File-backed save code missing" }
@@ -131,13 +135,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.5.0.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.5.1.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.5.0
-          path: dist/Biodanza Music Player Setup 5.5.0.exe
+          name: Biodanza-Music-Player-Setup-5.5.1
+          path: dist/Biodanza Music Player Setup 5.5.1.exe
           if-no-files-found: error
