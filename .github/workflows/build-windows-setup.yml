@@ -47,24 +47,28 @@ jobs:
           $suffix = $html.Substring($scriptEnd)
           $html = $prefix + $safeTail + $suffix
 
-          if ($html -notmatch 'folder-controls\.js') {
-            $html = $html -replace '</body>', '<script src="folder-controls.js"></script></body>'
-          }
-          if ($html -notmatch 'language-update\.js') {
-            $html = $html -replace '</body>', '<script src="language-update.js"></script></body>'
-          }
-          if ($html -notmatch 'relink-upgrade\.js') {
-            $html = $html -replace '</body>', '<script src="relink-upgrade.js"></script></body>'
-          }
+          # Inject external scripts only before the final real </body> tag.
+          $bodyEnd = $html.LastIndexOf('</body>')
+          if ($bodyEnd -lt 0) { throw "Final body tag not found" }
+          $inject = '<script src="folder-controls.js"></script><script src="language-update.js"></script><script src="relink-upgrade.js"></script>'
+          $html = $html.Substring(0, $bodyEnd) + $inject + $html.Substring($bodyEnd)
+
+          # Extract the main inline script so Node can syntax-check exactly what Chromium will parse.
+          $scriptStart = $html.IndexOf('<script>')
+          $scriptClose = $html.IndexOf('</script>', $scriptStart)
+          if ($scriptStart -lt 0 -or $scriptClose -lt 0) { throw "Main inline script not found" }
+          $inlineJs = $html.Substring($scriptStart + 8, $scriptClose - ($scriptStart + 8))
+          Set-Content inline-main.js -Value $inlineJs -Encoding UTF8
           Set-Content index.html -Value $html -Encoding UTF8
           Write-Host "index.html size: $((Get-Item index.html).Length)"
 
       - name: Upload patched renderer debug files
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-renderer-debug
+          name: Biodanza-renderer-debug-5.4.4
           path: |
             index.html
+            inline-main.js
             folder-controls.js
           if-no-files-found: error
 
@@ -83,13 +87,16 @@ jobs:
           node --check folder-controls.js
           node --check language-update.js
           node --check relink-upgrade.js
+          node --check inline-main.js
 
       - name: Verify patched index markers
         shell: pwsh
         run: |
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
-          if ($html -notmatch 'folder-controls\.js') { throw "folder-controls.js was not injected" }
+          if (($html | Select-String -Pattern '<script src="folder-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "folder-controls injection count is not 1" }
+          if (($html | Select-String -Pattern '<script src="language-update.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "language-update injection count is not 1" }
+          if (($html | Select-String -Pattern '<script src="relink-upgrade.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "relink-upgrade injection count is not 1" }
 
       - name: Build Windows Setup
         run: npm run build:setup
@@ -97,13 +104,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.3.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.4.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.3
-          path: dist/Biodanza Music Player Setup 5.4.3.exe
+          name: Biodanza-Music-Player-Setup-5.4.4
+          path: dist/Biodanza Music Player Setup 5.4.4.exe
           if-no-files-found: error
