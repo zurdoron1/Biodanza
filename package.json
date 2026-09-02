@@ -21,14 +21,15 @@
     "files": [
       "index.html",
       "folder-controls.js",
+      "workspace-controls.js",
       "language-update.js",
       "relink-upgrade.js",
       "main.js",
       "preload.js",
       "package.json"
     ],
-    "directories": {"output": "dist"},
-    "win": {"target": [{"target":"nsis","arch":["x64"]}]},
+    "directories": {"output":"dist"},
+    "win": {"target":[{"target":"nsis","arch":["x64"]}]},
     "nsis": {
       "oneClick": false,
       "perMachine": false,
