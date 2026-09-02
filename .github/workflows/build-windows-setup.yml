@@ -47,6 +47,12 @@ jobs:
           $suffix = $html.Substring($scriptEnd)
           $html = $prefix + $safeTail + $suffix
 
+          # Fix workspace visibility: .main-grid{display:block!important} appears after .hidden and otherwise prevents mainWorkspace from hiding.
+          $headEnd = $html.LastIndexOf('</head>')
+          if ($headEnd -lt 0) { throw "Final head tag not found" }
+          $workspaceCss = '<style id="workspaceVisibilityFix">#mainWorkspace.hidden{display:none!important}</style>'
+          $html = $html.Substring(0, $headEnd) + $workspaceCss + $html.Substring($headEnd)
+
           # Inject external scripts only before the final real </body> tag.
           $bodyEnd = $html.LastIndexOf('</body>')
           if ($bodyEnd -lt 0) { throw "Final body tag not found" }
@@ -61,16 +67,6 @@ jobs:
           Set-Content inline-main.js -Value $inlineJs -Encoding UTF8
           Set-Content index.html -Value $html -Encoding UTF8
           Write-Host "index.html size: $((Get-Item index.html).Length)"
-
-      - name: Upload patched renderer debug files
-        uses: actions/upload-artifact@v4
-        with:
-          name: Biodanza-renderer-debug-5.4.4
-          path: |
-            index.html
-            inline-main.js
-            folder-controls.js
-          if-no-files-found: error
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -94,6 +90,7 @@ jobs:
         run: |
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
+          if ($html -notmatch '#mainWorkspace\.hidden\{display:none!important\}') { throw "Workspace visibility fix missing" }
           if (($html | Select-String -Pattern '<script src="folder-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "folder-controls injection count is not 1" }
           if (($html | Select-String -Pattern '<script src="language-update.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "language-update injection count is not 1" }
           if (($html | Select-String -Pattern '<script src="relink-upgrade.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "relink-upgrade injection count is not 1" }
@@ -104,13 +101,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.4.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.5.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.4
-          path: dist/Biodanza Music Player Setup 5.4.4.exe
+          name: Biodanza-Music-Player-Setup-5.4.5
+          path: dist/Biodanza Music Player Setup 5.4.5.exe
           if-no-files-found: error
