@@ -1,7 +1,7 @@
 {
   "name": "biodanza-music-player",
   "productName": "Biodanza Music Player",
-  "version": "5.4.7",
+  "version": "5.4.8",
   "description": "נגן מיון ואפיון מוזיקה לביודנסה - גרסת Electron",
   "main": "main.js",
   "private": true,
@@ -25,6 +25,7 @@
       "language-update.js",
       "relink-upgrade.js",
       "data-store-upgrade.js",
+      "recovery-export.js",
       "main.js",
       "preload.js",
       "package.json"
@@ -43,7 +44,7 @@
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     },
-    "artifactName": "Biodanza Music Player Setup 5.4.7.${ext}",
+    "artifactName": "Biodanza Music Player Setup 5.4.8.${ext}",
     "asar": true
   }
 }
