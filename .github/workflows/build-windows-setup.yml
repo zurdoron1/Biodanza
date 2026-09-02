@@ -48,9 +48,10 @@ jobs:
           $relink = $relink.Replace("const headerToolbar = document.querySelector('#topCard header .toolbar');", "const headerToolbar = document.querySelector('#advancedHost') || document.querySelector('#topCard header .toolbar');")
           $relink = $relink.Replace("const topCard = `$id('topCard');", "const topCard = `$id('advancedHost') || `$id('topCard');")
           $relink = $relink.Replace("importLabel.textContent = '📥 ייבא חבילת העברה';", "importLabel.textContent = '📥 ייבא חבילת העברה ושייך מחדש';")
-          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.4.9'")
+          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.5.0'")
           $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
 
+          # Recovery packages can lack duration/fingerprint. Use filename + size as strong evidence.
           $scoreNeedle = "let score=0; const reasons=[];"
           $scorePatchB64 = "bGV0IHNjb3JlPTA7IGNvbnN0IHJlYXNvbnM9W107CmNvbnN0IG9sZE5hbWUgPSBTdHJpbmcocC5maWxlTmFtZSB8fCBmYWxsYmFja05hbWUocC5vbGRLZXkgfHwgJycpIHx8ICcnKTsKY29uc3QgbmV3TmFtZSA9IFN0cmluZyh0LmZpbGU/Lm5hbWUgfHwgJycpOwpjb25zdCBuYW1lU2ltID0gc2ltaWxhcml0eShvbGROYW1lLCBuZXdOYW1lKTsKY29uc3Qgb2xkU2l6ZSA9IE51bWJlcihwLnNpemUpIHx8IE51bWJlcihTdHJpbmcocC5vbGRLZXkgfHwgJycpLnNwbGl0KCd8JylbMV0pIHx8IDA7CmNvbnN0IG5ld1NpemUgPSBOdW1iZXIodC5maWxlPy5zaXplKSB8fCAwOwpjb25zdCBzaXplUmF0aW8gPSBvbGRTaXplICYmIG5ld1NpemUgPyBNYXRoLmFicyhvbGRTaXplLW5ld1NpemUpL01hdGgubWF4KG9sZFNpemUsbmV3U2l6ZSkgOiAxOwpjb25zdCBleGFjdE5vcm1hbGl6ZWROYW1lID0gISFvbGROYW1lICYmICEhbmV3TmFtZSAmJiBub3JtKG9sZE5hbWUpID09PSBub3JtKG5ld05hbWUpOwppZihleGFjdE5vcm1hbGl6ZWROYW1lICYmIG9sZFNpemUgJiYgbmV3U2l6ZSAmJiBvbGRTaXplPT09bmV3U2l6ZSl7CiAgc2NvcmUgKz0gOTI7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXldeS15XXk9ecINeW15TXmdedJyk7Cn0gZWxzZSBpZihuYW1lU2ltPj0wLjk4ICYmIHNpemVSYXRpbzw9MC4wMDUpewogIHNjb3JlICs9IDg2OyByZWFzb25zLnB1c2goJ9ep150g16fXldeR16Ug15vXntei15gg15bXlNeUINeV15LXldeT15wg16rXldeQ150nKTsKfSBlbHNlIHsKICBpZihuYW1lU2ltPj0wLjk1KXsgc2NvcmUgKz0gNDg7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXp9eo15XXkSDXnteQ15XXkycpOyB9CiAgZWxzZSBpZihuYW1lU2ltPj0wLjg1KXsgc2NvcmUgKz0gMzQ7IHJlYXNvbnMucHVzaCgn16nXnSDXp9eV15HXpSDXk9eV157XlCcpOyB9CiAgZWxzZSBpZihuYW1lU2ltPj0wLjcyKXsgc2NvcmUgKz0gMjA7IH0KICBpZihvbGRTaXplICYmIG5ld1NpemUpewogICAgaWYob2xkU2l6ZT09PW5ld1NpemUpeyBzY29yZSArPSAzNjsgcmVhc29ucy5wdXNoKCfXkteV15PXnCDXp9eV15HXpSDXlteU15QnKTsgfQogICAgZWxzZSBpZihzaXplUmF0aW88PTAuMDA1KXsgc2NvcmUgKz0gMzA7IHJlYXNvbnMucHVzaCgn15LXldeT15wg15vXntei15gg15bXlNeUJyk7IH0KICAgIGVsc2UgaWYoc2l6ZVJhdGlvPD0wLjAyKXsgc2NvcmUgKz0gMTg7IH0KICB9Cn0K"
           $scorePatch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($scorePatchB64))
@@ -59,7 +60,7 @@ jobs:
 
           $dataStore = Get-Content data-store-upgrade.js -Raw
           $recovery = Get-Content recovery-export.js -Raw
-          $insidePatch = "`n// ---- transfer and relink feature ----`n" + $relink + "`n// ---- file-backed player database ----`n" + $dataStore + "`n// ---- recovery transfer exporter ----`n" + $recovery + "`n"
+          $insidePatch = "`n// ---- transfer and relink feature ----`n" + $relink + "`n// ---- file-backed player database ----`n" + $dataStore + "`n// ---- recovery/database upgrade ----`n" + $recovery + "`n"
           $html = $html.Substring(0,$lastClose) + $insidePatch + $html.Substring($lastClose)
 
           $lastClose = $html.LastIndexOf('})();')
@@ -107,6 +108,7 @@ jobs:
           node --check relink-upgrade.js
           node --check data-store-upgrade.js
           node --check recovery-export.js
+          node --check database-display-upgrade.js
           node --check inline-main.js
 
       - name: Verify patched index markers
@@ -115,9 +117,9 @@ jobs:
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
           if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
-          if ($html -notmatch 'צור חבילת העברה בטוחה') { throw "Recovery exporter missing" }
           if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
           if ($html -notmatch 'שם קובץ וגודל זהים') { throw "Recovery filename-size scoring patch missing" }
+          if ($html -notmatch '__allSavedAnnotationRows') { throw "Full central database display patch missing" }
           if ($html -notmatch '__restorePlayerDataFromDisk') { throw "File-backed data migration code missing" }
           if ($html -notmatch 'writePlayerData') { throw "File-backed save code missing" }
           if ($html -match '<script src="relink-upgrade.js"></script>') { throw "Relink script must not be external" }
@@ -129,13 +131,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.9.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.5.0.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.9
-          path: dist/Biodanza Music Player Setup 5.4.9.exe
+          name: Biodanza-Music-Player-Setup-5.5.0
+          path: dist/Biodanza Music Player Setup 5.5.0.exe
           if-no-files-found: error
