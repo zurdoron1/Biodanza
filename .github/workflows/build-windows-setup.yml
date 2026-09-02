@@ -32,34 +32,75 @@ jobs:
           if (-not (Test-Path index.html)) { throw "index.html reconstruction failed" }
 
           $html = Get-Content index.html -Raw
+
+          # Export the Electron library loader for folder-controls.js.
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
           if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
           if ($html -notmatch '__biodanzaLoadElectronLibrary') {
             $html = $html.Replace($endNeedle, "window.__biodanzaLoadElectronLibrary=loadElectronLibrary;`n" + $endNeedle)
           }
 
+          # Make workspace switching explicit and independent of conflicting CSS.
+          $mainLine = " $('mainWorkspace').classList.toggle('hidden',name!=='main');"
+          $mainReplacement = @"
+ $('mainWorkspace').classList.toggle('hidden',name!=='main');
+ $('mainWorkspace').style.setProperty('display',name==='main'?'block':'none','important');
+ $('activeWorkspace').classList.toggle('hidden',name!=='active');
+ $('activeWorkspace').style.setProperty('display',name==='active'?'block':'none','important');
+"@
+          if (-not $html.Contains($mainLine)) { throw "switchWorkspace main line not found" }
+          $html = $html.Replace($mainLine, $mainReplacement.TrimEnd())
+
+          $exportLine = " $('exportWorkspace').classList.toggle('hidden',name!=='export');"
+          $exportReplacement = @"
+ $('exportWorkspace').classList.toggle('hidden',name!=='export');
+ $('exportWorkspace').style.setProperty('display',name==='export'?'block':'none','important');
+"@
+          $html = $html.Replace($exportLine, $exportReplacement.TrimEnd())
+
+          $advancedLine = " $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');"
+          $advancedReplacement = @"
+ $('advancedWorkspace').classList.toggle('hidden',name!=='advanced');
+ $('advancedWorkspace').style.setProperty('display',name==='advanced'?'block':'none','important');
+"@
+          $html = $html.Replace($advancedLine, $advancedReplacement.TrimEnd())
+
+          # Insert the relink feature INSIDE the main IIFE so it can access state, ann(), probeDurations(), etc.
           $lastClose = $html.LastIndexOf('})();')
           $scriptEnd = $html.IndexOf('</script>', $lastClose)
           if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found" }
+
+          $relink = Get-Content relink-upgrade.js -Raw
+          $relink = $relink.Replace("const headerToolbar = document.querySelector('#topCard header .toolbar');", "const headerToolbar = document.querySelector('#advancedHost') || document.querySelector('#topCard header .toolbar');")
+          $relink = $relink.Replace("const topCard = `$id('topCard');", "const topCard = `$id('advancedHost') || `$id('topCard');")
+          $relink = $relink.Replace("importLabel.textContent = '📥 ייבא חבילת העברה';", "importLabel.textContent = '📥 ייבא חבילת העברה ושייך מחדש';")
+          $relink = $relink.Replace("appVersion:'5.4.0'", "appVersion:'5.4.6'")
+          $relink = $relink.Replace("window.probeDurations = async function(){", "probeDurations = async function(){")
+          $html = $html.Substring(0,$lastClose) + "`n// ---- transfer and relink feature ----`n" + $relink + "`n" + $html.Substring($lastClose)
+
+          # Remove the old broken tail after the main IIFE and add a safe Electron-only hint.
+          $lastClose = $html.LastIndexOf('})();')
+          $scriptEnd = $html.IndexOf('</script>', $lastClose)
+          if ($lastClose -lt 0 -or $scriptEnd -lt 0) { throw "Final IIFE/script boundary not found after relink injection" }
           $safeTailB64 = "CigoKSA9PiB7CiAgY29uc3QgaXNFbGVjdHJvbiA9IEJvb2xlYW4od2luZG93LmVsZWN0cm9uQVBJPy5pc0VsZWN0cm9uKTsKICBpZiAoIWlzRWxlY3Ryb24pIHJldHVybjsKICBkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCdsYWJlbFtmb3I9ImZvbGRlciJdLGxhYmVsW2Zvcj0iZmlsZXMiXScpLmZvckVhY2goZWwgPT4gZWwuc3R5bGUuZGlzcGxheT0nbm9uZScpOwogIGNvbnN0IHRvcCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdlbGVjdHJvbkxpYnJhcnlTdGF0dXMnKTsKICBpZiAodG9wICYmICFkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnZWxlY3Ryb25Gb2xkZXJIaW50JykpIHsKICAgIHRvcC5pbnNlcnRBZGphY2VudEhUTUwoJ2FmdGVyZW5kJywnPGRpdiBpZD0iZWxlY3Ryb25Gb2xkZXJIaW50IiBjbGFzcz0ic21hbGwiIHN0eWxlPSJ3aWR0aDoxMDAlO21hcmdpbi10b3A6NHB4Ij5FbGVjdHJvbiDXqdeV157XqCDXkNeqINee15nXp9eV150g15TXqteZ16fXmdeZ15QuINeQ150g15TXmdeQINeq15XXoteR16gsINeR15fXqCDXkNeV16rXlCDXnteX15PXqSDXldeU157XkNeS16gg15TXp9eZ15nXnSDXmdeZ16nXkNeoLjwvZGl2PicpOwogIH0KfSkoKTsK"
           $safeTail = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($safeTailB64))
           $prefix = $html.Substring(0, $lastClose + 5)
           $suffix = $html.Substring($scriptEnd)
           $html = $prefix + $safeTail + $suffix
 
-          # Fix workspace visibility: .main-grid{display:block!important} appears after .hidden and otherwise prevents mainWorkspace from hiding.
+          # Strong visibility guard.
           $headEnd = $html.LastIndexOf('</head>')
           if ($headEnd -lt 0) { throw "Final head tag not found" }
-          $workspaceCss = '<style id="workspaceVisibilityFix">#mainWorkspace.hidden{display:none!important}</style>'
+          $workspaceCss = '<style id="workspaceVisibilityFix">#mainWorkspace.hidden,#activeWorkspace.hidden,#exportWorkspace.hidden,#advancedWorkspace.hidden{display:none!important}</style>'
           $html = $html.Substring(0, $headEnd) + $workspaceCss + $html.Substring($headEnd)
 
-          # Inject external scripts only before the final real </body> tag.
+          # External helpers; relink-upgrade is already injected inside the main scope.
           $bodyEnd = $html.LastIndexOf('</body>')
           if ($bodyEnd -lt 0) { throw "Final body tag not found" }
-          $inject = '<script src="folder-controls.js"></script><script src="language-update.js"></script><script src="relink-upgrade.js"></script>'
+          $inject = '<script src="folder-controls.js"></script><script src="language-update.js"></script>'
           $html = $html.Substring(0, $bodyEnd) + $inject + $html.Substring($bodyEnd)
 
-          # Extract the main inline script so Node can syntax-check exactly what Chromium will parse.
+          # Extract and syntax-check the exact main renderer script.
           $scriptStart = $html.IndexOf('<script>')
           $scriptClose = $html.IndexOf('</script>', $scriptStart)
           if ($scriptStart -lt 0 -or $scriptClose -lt 0) { throw "Main inline script not found" }
@@ -90,10 +131,12 @@ jobs:
         run: |
           $html = Get-Content index.html -Raw
           if ($html -notmatch '__biodanzaLoadElectronLibrary=loadElectronLibrary') { throw "Electron library loader was not exported" }
-          if ($html -notmatch '#mainWorkspace\.hidden\{display:none!important\}') { throw "Workspace visibility fix missing" }
+          if ($html -notmatch "activeWorkspace.*name==='active'") { throw "Active workspace switch fix missing" }
+          if ($html -notmatch 'exportTransferPackage') { throw "Transfer package UI missing" }
+          if ($html -notmatch 'ייבא חבילת העברה ושייך מחדש') { throw "Relink import button missing" }
+          if ($html -match '<script src="relink-upgrade.js"></script>') { throw "Relink script must not be external" }
           if (($html | Select-String -Pattern '<script src="folder-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "folder-controls injection count is not 1" }
           if (($html | Select-String -Pattern '<script src="language-update.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "language-update injection count is not 1" }
-          if (($html | Select-String -Pattern '<script src="relink-upgrade.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "relink-upgrade injection count is not 1" }
 
       - name: Build Windows Setup
         run: npm run build:setup
@@ -101,13 +144,13 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.5.exe" -File | Select-Object -First 1
+          $setup = Get-ChildItem dist -Filter "Biodanza Music Player Setup 5.4.6.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "Setup EXE was not created" }
           Write-Host "Created: $($setup.FullName)"
 
       - name: Upload Setup EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Biodanza-Music-Player-Setup-5.4.5
-          path: dist/Biodanza Music Player Setup 5.4.5.exe
+          name: Biodanza-Music-Player-Setup-5.4.6
+          path: dist/Biodanza Music Player Setup 5.4.6.exe
           if-no-files-found: error
