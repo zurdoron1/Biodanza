@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   writePlaylist: (filename, content) => ipcRenderer.invoke('music:write-playlist', filename, content),
   openPath: (targetPath) => ipcRenderer.invoke('system:open-path', targetPath),
-  showItemInFolder: (targetPath) => ipcRenderer.invoke('system:show-item', targetPath)
+  showItemInFolder: (targetPath) => ipcRenderer.invoke('system:show-item', targetPath),
+  lookupLyrics: (meta) => ipcRenderer.invoke('lyrics:lookup', meta)
 });
