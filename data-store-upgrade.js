@@ -3,6 +3,7 @@
 
 let __playerDataSaveTimer = null;
 let __playerDataWriteQueue = Promise.resolve();
+let __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
 
 function __refreshAfterPlayerDataLoad(){
   try { if (typeof populateCharacterizedFilters === 'function') populateCharacterizedFilters(); } catch {}
@@ -34,6 +35,15 @@ function __writePlayerDataNow(){
 
 saveData = function(){
   try { showSaveState('saving'); } catch {}
+  const currentCount = Object.keys(state.annotations || {}).length;
+  if (currentCount !== __lastKnownAnnotationCount) {
+    __lastKnownAnnotationCount = currentCount;
+    __refreshAfterPlayerDataLoad();
+    try {
+      const characterized = typeof characterizedRows === 'function' ? characterizedRows().length : currentCount;
+      if (characterized > 0) showToast(`מאגר האפיונים עודכן: ${characterized} שירים מאופיינים`);
+    } catch {}
+  }
   if (window.electronAPI?.writePlayerData) {
     clearTimeout(__playerDataSaveTimer);
     __playerDataSaveTimer = setTimeout(() => { __writePlayerDataNow(); }, 120);
@@ -58,6 +68,7 @@ async function __restorePlayerDataFromDisk(){
     if (disk.exists) {
       state.annotations = disk.annotations && typeof disk.annotations === 'object' ? disk.annotations : {};
       state.chosen = Array.isArray(disk.chosen) ? disk.chosen : [];
+      __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen)); } catch {}
       __refreshAfterPlayerDataLoad();
@@ -71,6 +82,7 @@ async function __restorePlayerDataFromDisk(){
     if (hasLegacy) {
       const result = await window.electronAPI.writePlayerData({annotations:state.annotations || {},chosen:state.chosen || []});
       if (!result?.ok) throw new Error(result?.error || 'העברת המאגר לאחסון החדש נכשלה');
+      __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen || [])); } catch {}
       __refreshAfterPlayerDataLoad();
