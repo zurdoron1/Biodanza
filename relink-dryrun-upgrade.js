@@ -56,16 +56,16 @@
     const pd=Number(p?.duration)||0, nd=r.duration;
     const dd=pd&&nd?Math.abs(pd-nd):9999;
     const reasons=[];
-    let score=0,strong=0;
+    let score=0,strong=0,corroborators=0;
     if(titleSim>=.96){score+=42;strong++;reasons.push('כותרת כמעט זהה');} else if(titleSim>=.86){score+=28;reasons.push('כותרת דומה');}
     if(nameSim>=.96){score+=30;strong++;reasons.push('שם קובץ כמעט זהה');} else if(nameSim>=.84){score+=18;reasons.push('שם קובץ דומה');}
-    if(pa&&r.artist){if(artistSim>=.92){score+=28;strong++;reasons.push('מבצע תואם');}else if(artistSim>=.75){score+=12;reasons.push('מבצע דומה');}else if(artistSim<.30){score-=18;reasons.push('מבצע שונה');}}
-    if(os&&ns){if(os===ns){score+=24;strong++;reasons.push('גודל זהה');}else if(sizeRatio<=.005){score+=20;strong++;reasons.push('גודל כמעט זהה');}else if(sizeRatio<=.02){score+=8;}}
-    if(pd&&nd){if(dd<=2){score+=30;strong++;reasons.push('משך תואם');}else if(dd<=4){score+=22;strong++;reasons.push('משך קרוב');}else if(dd>15){score-=20;reasons.push('משך שונה');}}
+    if(pa&&r.artist){if(artistSim>=.92){score+=28;strong++;corroborators++;reasons.push('מבצע תואם');}else if(artistSim>=.75){score+=12;reasons.push('מבצע דומה');}else if(artistSim<.30){score-=18;reasons.push('מבצע שונה');}}
+    if(os&&ns){if(os===ns){score+=24;strong++;corroborators++;reasons.push('גודל זהה');}else if(sizeRatio<=.005){score+=20;strong++;corroborators++;reasons.push('גודל כמעט זהה');}else if(sizeRatio<=.02){score+=8;}}
+    if(pd&&nd){if(dd<=2){score+=30;strong++;corroborators++;reasons.push('משך תואם');}else if(dd<=4){score+=22;strong++;corroborators++;reasons.push('משך קרוב');}else if(dd>15){score-=20;reasons.push('משך שונה');}}
     const semantic=Math.max(overlap(pt,r.title),overlap(fileName(p),r.name));
     if(semantic>=.8){score+=18;reasons.push('מילים מרכזיות תואמות');}
-    const reliable = strong>=2 || (strong>=1 && score>=78);
-    return {score:Math.round(score),strong,reliable,reasons,titleSim,artistSim,nameSim};
+    const reliable = strong>=1 && score>=60;
+    return {score:Math.round(score),strong,corroborators,reliable,reasons,titleSim,artistSim,nameSim};
   }
 
   async function dryRun(pkg){
@@ -86,8 +86,8 @@
       const sameLogical=best&&second&&best.t.logicalSongId&&best.t.logicalSongId===second.t.logicalSongId;
       const ambiguous=best&&second&&!sameLogical&&Math.abs(best.score-second.score)<10;
       let status='missing';
-      if(best&&best.reliable&&best.score>=90&&!ambiguous) status='safe';
-      else if(best&&best.reliable&&best.score>=70) status='review';
+      if(best&&best.reliable&&best.corroborators>=1&&best.score>=72&&!ambiguous) status='safe';
+      else if(best&&best.reliable&&best.score>=60) status='review';
       if(status==='safe')safe++;else if(status==='review')review++;else missing++;
       results.push({oldKey,p,status,best:best?{key:best.t.key,name:best.name,title:best.title,artist:best.artist,score:best.score,reasons:best.reasons,copies:1+(best.t.alternateFiles?.length||0)}:null});
       if(n%4===0||n===entries.length-1){
@@ -104,7 +104,6 @@
     return results;
   }
 
-  // Replace the old expensive relinker with the indexed read-only diagnostic.
   relinkPackage=dryRun;
   if(typeof importInput!=='undefined'&&importInput){
     importInput.onchange=async e=>{
