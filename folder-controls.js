@@ -6,9 +6,19 @@
   }
   async function applyPayload(payload){
     if(!payload || payload.canceled) return;
+    if(payload.status === 'missing'){
+      setStatus(`התיקייה הקודמת אינה זמינה: ${payload.previousPath || ''}`, true);
+      alert('תיקיית המוזיקה הקודמת אינה זמינה. המאגר השמור נשאר ללא שינוי.\nבחר תיקייה חדשה כדי להמשיך.');
+      return;
+    }
+    if(payload.status === 'none'){
+      setStatus('עדיין לא נבחרה תיקיית מוזיקה.');
+      return;
+    }
     const loader = window.__biodanzaLoadElectronLibrary;
     if(typeof loader === 'function'){
-      loader(payload);
+      setStatus(`טוען ${payload.files?.length || 0} קבצי מוזיקה…`);
+      await loader(payload);
       return;
     }
     setStatus('שגיאה: פונקציית טעינת הספרייה אינה זמינה.', true);
@@ -24,7 +34,7 @@
     }catch(err){
       console.error('folder choose failed', err);
       setStatus('שגיאה בחיבור ל־Electron: ' + (err?.message || err), true);
-      alert('לא ניתן לפתוח את חלון בחירת התיקייה.\n\n' + (err?.message || err));
+      alert('לא ניתן לפתוח או לטעון את תיקיית המוזיקה.\n\n' + (err?.message || err));
     }
   }
   async function reopen(){
@@ -39,19 +49,20 @@
       alert('לא ניתן לפתוח את תיקיית המוזיקה הקודמת.\n\n' + (err?.message || err));
     }
   }
-  function prepare(){
+  async function prepare(){
     const chooseBtn=byId('choosePersistentFolder');
     const reopenBtn=byId('reopenPreviousFolder');
     if(chooseBtn) chooseBtn.disabled=false;
     if(reopenBtn) reopenBtn.disabled=false;
     if(window.electronAPI?.isElectron){
-      setStatus('Electron מחובר — בחירת תיקייה פעילה.');
+      let suffix='';
+      try{ const v=await window.electronAPI.getAppVersion?.(); if(v) suffix=` · גרסה ${v}`; }catch{}
+      setStatus('Electron מחובר — בחירת תיקייה פעילה' + suffix + '.');
     }else{
       setStatus('Electron לא מחובר — preload לא נטען.', true);
     }
   }
 
-  // Delegated capture handler: runs before target-level handlers in the main app.
   document.addEventListener('click', (e) => {
     const target = e.target?.closest?.('#choosePersistentFolder,#reopenPreviousFolder');
     if(!target) return;
