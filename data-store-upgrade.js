@@ -12,9 +12,31 @@ function __refreshAfterPlayerDataLoad(){
   try { if (typeof renderActiveLibrary === 'function') renderActiveLibrary(); } catch {}
   try { if (typeof renderExportMatches === 'function') renderExportMatches(); } catch {}
   try { if (typeof renderExportSequence === 'function') renderExportSequence(); } catch {}
+  try { if (typeof updatePlaylistNameUI === 'function') updatePlaylistNameUI(); } catch {}
 }
 function __plainObject(v){ return v && typeof v==='object' && !Array.isArray(v) ? v : {}; }
+function __readUiPreferences(){
+  const values={};
+  for(const id of ['previewMode','clipLength','startPercent','gap','speed','order','normalize']){
+    const el=document.getElementById(id); if(!el) continue;
+    values[id]=id==='normalize'?Boolean(el.checked):el.value;
+  }
+  let legacy={};
+  try{ legacy=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')||{}; }catch{}
+  return {...legacy,...values};
+}
+function __applyPreferences(preferences){
+  const prefs=__plainObject(preferences);
+  for(const [id,value] of Object.entries(prefs)){
+    const el=document.getElementById(id); if(!el) continue;
+    if(id==='normalize') el.checked=(value===true||value==='on'||value==='true'); else el.value=value;
+  }
+  try{ if(document.getElementById('startPercentValue')) document.getElementById('startPercentValue').textContent=(document.getElementById('startPercent')?.value||0)+'%'; }catch{}
+  try{ if(typeof setNormalization==='function') setNormalization(); }catch{}
+  try{ if(typeof audio!=='undefined'&&audio) audio.playbackRate=Number(document.getElementById('speed')?.value)||1; }catch{}
+}
 function __playerDataPayload(){
+  state.preferences={...__plainObject(state.preferences),...__readUiPreferences()};
   return {
     annotations: __plainObject(state.annotations),
     chosen: Array.isArray(state.chosen) ? state.chosen : [],
@@ -33,6 +55,7 @@ function __applyDiskState(disk){
   state.logicalAliases=__plainObject(disk.logicalAliases);
   state.logicalSongs=__plainObject(disk.logicalSongs);
   state.preferences=__plainObject(disk.preferences);
+  __applyPreferences(state.preferences);
   __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
 }
 function __writePlayerDataNow(){
@@ -43,6 +66,9 @@ function __writePlayerDataNow(){
     if (!result?.ok) throw new Error(result?.error || 'שמירת מאגר האפיונים נכשלה');
     try { localStorage.removeItem(DATA_KEY); } catch {}
     try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen || [])); } catch {}
+    try { localStorage.setItem(SETTINGS_KEY,JSON.stringify(state.preferences||{})); } catch {}
+    try { localStorage.setItem('biodanzaPlaylistNameV1',state.playlistName||''); } catch {}
+    try { localStorage.setItem('biodanzaExportSequenceV1',JSON.stringify(state.exportSequence||[])); } catch {}
     try { showSaveState('saved'); } catch {}
     return result;
   }).catch(error => {
@@ -75,6 +101,22 @@ saveData = function(){
   }
 };
 
+try{
+  if(typeof saveSettings==='function'){
+    const __legacySaveSettings=saveSettings;
+    saveSettings=function(){ __legacySaveSettings(); state.preferences=__readUiPreferences(); saveData(); };
+  }
+}catch(error){console.warn('Could not hook settings persistence',error)}
+try{
+  if(typeof saveExportSequence==='function'){
+    const __legacySaveExportSequence=saveExportSequence;
+    saveExportSequence=function(){ __legacySaveExportSequence(); saveData(); };
+  }
+}catch(error){console.warn('Could not hook export sequence persistence',error)}
+try{
+  document.getElementById('savePlaylistName')?.addEventListener('click',()=>setTimeout(()=>saveData(),0));
+}catch{}
+
 async function __restorePlayerDataFromDisk(){
   if (!window.electronAPI?.readPlayerData || !window.electronAPI?.writePlayerData) return;
   try {
@@ -93,7 +135,8 @@ async function __restorePlayerDataFromDisk(){
       if(Number(disk.version||1)<2 || disk.recoveredFromBackup) setTimeout(()=>__writePlayerDataNow(),50);
       return;
     }
-    const hasLegacy = Object.keys(state.annotations || {}).length > 0 || (state.chosen || []).length > 0;
+    state.preferences={...__readUiPreferences(),...__plainObject(state.preferences)};
+    const hasLegacy = Object.keys(state.annotations || {}).length > 0 || (state.chosen || []).length > 0 || Object.keys(state.preferences).length>0;
     if (hasLegacy) {
       const result = await window.electronAPI.writePlayerData(__playerDataPayload());
       if (!result?.ok) throw new Error(result?.error || 'העברת המאגר לאחסון החדש נכשלה');
@@ -101,7 +144,7 @@ async function __restorePlayerDataFromDisk(){
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen || [])); } catch {}
       __refreshAfterPlayerDataLoad();
-      try { showToast('מאגר האפיונים הועבר לאחסון הקבוע.'); } catch {}
+      try { showToast('המאגר וההגדרות הועברו לאחסון הקבוע.'); } catch {}
     }
   } catch (error) {
     console.error('Player data migration/load failed', error);
