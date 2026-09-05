@@ -16,56 +16,97 @@ function configPath() { return path.join(appDataDir(), 'config.json'); }
 function playerDataPath() { return path.join(appDataDir(), 'player-data.json'); }
 function playerDataBackupPath() { return path.join(appDataDir(), 'player-data.backup.json'); }
 
-function readConfig() {
-  try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); }
-  catch { return {}; }
+function readJsonSync(filePath, fallback = {}) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch { return fallback; }
 }
-function writeConfig(data) {
-  fs.writeFileSync(configPath(), JSON.stringify(data, null, 2), 'utf8');
+async function writeJsonAtomic(filePath, value) {
+  const temp = filePath + '.tmp';
+  const json = JSON.stringify(value, null, 2);
+  await fsp.writeFile(temp, json, 'utf8');
+  try {
+    await fsp.rename(temp, filePath);
+  } catch {
+    await fsp.copyFile(temp, filePath);
+    try { await fsp.unlink(temp); } catch {}
+  }
 }
-function setLibraryRoot(rootPath) {
+
+function readConfig() { return readJsonSync(configPath(), {}); }
+async function writeConfig(data) { await writeJsonAtomic(configPath(), data); }
+async function setLibraryRoot(rootPath) {
   const cfg = readConfig();
   cfg.libraryRoot = rootPath;
   cfg.updatedAt = new Date().toISOString();
-  writeConfig(cfg);
+  await writeConfig(cfg);
 }
 function getLibraryRoot() { return readConfig().libraryRoot || ''; }
 
+function sanitizePlayerData(parsed = {}) {
+  return {
+    version: Number(parsed.version) || 1,
+    updatedAt: String(parsed.updatedAt || ''),
+    annotations: parsed && typeof parsed.annotations === 'object' && parsed.annotations && !Array.isArray(parsed.annotations) ? parsed.annotations : {},
+    chosen: Array.isArray(parsed.chosen) ? parsed.chosen : [],
+    playlistName: typeof parsed.playlistName === 'string' ? parsed.playlistName : '',
+    exportSequence: Array.isArray(parsed.exportSequence) ? parsed.exportSequence : [],
+    logicalAliases: parsed && typeof parsed.logicalAliases === 'object' && parsed.logicalAliases && !Array.isArray(parsed.logicalAliases) ? parsed.logicalAliases : {},
+    logicalSongs: parsed && typeof parsed.logicalSongs === 'object' && parsed.logicalSongs && !Array.isArray(parsed.logicalSongs) ? parsed.logicalSongs : {},
+    preferences: parsed && typeof parsed.preferences === 'object' && parsed.preferences && !Array.isArray(parsed.preferences) ? parsed.preferences : {}
+  };
+}
+
+async function tryReadPlayerDataFile(filePath) {
+  const raw = await fsp.readFile(filePath, 'utf8');
+  return sanitizePlayerData(JSON.parse(raw));
+}
+
 async function readPlayerData() {
+  const target = playerDataPath();
+  const backup = playerDataBackupPath();
   try {
-    const raw = await fsp.readFile(playerDataPath(), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      ok: true,
-      exists: true,
-      annotations: parsed && typeof parsed.annotations === 'object' && parsed.annotations ? parsed.annotations : {},
-      chosen: Array.isArray(parsed?.chosen) ? parsed.chosen : [],
-      updatedAt: parsed?.updatedAt || ''
-    };
-  } catch (error) {
-    if (error?.code === 'ENOENT') return { ok: true, exists: false, annotations: {}, chosen: [] };
-    return { ok: false, exists: false, annotations: {}, chosen: [], error: String(error?.message || error) };
+    const data = await tryReadPlayerDataFile(target);
+    return { ok: true, exists: true, recoveredFromBackup: false, ...data };
+  } catch (primaryError) {
+    if (primaryError?.code === 'ENOENT') {
+      try {
+        const backupData = await tryReadPlayerDataFile(backup);
+        try { await fsp.copyFile(backup, target); } catch {}
+        return { ok: true, exists: true, recoveredFromBackup: true, ...backupData };
+      } catch (backupError) {
+        if (backupError?.code === 'ENOENT') return { ok: true, exists: false, recoveredFromBackup: false, ...sanitizePlayerData({}) };
+        return { ok: false, exists: false, recoveredFromBackup: false, ...sanitizePlayerData({}), error: `Primary missing; backup unreadable: ${backupError?.message || backupError}` };
+      }
+    }
+    try {
+      const backupData = await tryReadPlayerDataFile(backup);
+      try { await fsp.copyFile(backup, target); } catch {}
+      return { ok: true, exists: true, recoveredFromBackup: true, ...backupData, warning: `Primary database was unreadable and backup was restored: ${primaryError?.message || primaryError}` };
+    } catch (backupError) {
+      return { ok: false, exists: false, recoveredFromBackup: false, ...sanitizePlayerData({}), error: `Primary database unreadable (${primaryError?.message || primaryError}); backup unreadable (${backupError?.message || backupError})` };
+    }
   }
 }
 
 async function writePlayerData(data = {}) {
-  const annotations = data && typeof data.annotations === 'object' && data.annotations ? data.annotations : {};
-  const chosen = Array.isArray(data?.chosen) ? data.chosen : [];
   const payload = {
-    version: 1,
+    version: 2,
     updatedAt: new Date().toISOString(),
-    annotations,
-    chosen
+    ...sanitizePlayerData(data)
   };
+  payload.version = 2;
+  payload.updatedAt = new Date().toISOString();
   const json = JSON.stringify(payload);
   const target = playerDataPath();
   const backup = playerDataBackupPath();
   const temp = target + '.tmp';
   try {
+    await fsp.writeFile(temp, json, 'utf8');
     if (fs.existsSync(target)) {
       try { await fsp.copyFile(target, backup); } catch {}
     }
-    await fsp.writeFile(temp, json, 'utf8');
     try {
       await fsp.rename(temp, target);
     } catch {
@@ -81,32 +122,42 @@ async function writePlayerData(data = {}) {
 
 async function scanFolder(rootPath) {
   const files = [];
-  async function walk(dir) {
-    let entries;
-    try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
-    catch { return; }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(full);
-      } else if (entry.isFile() && AUDIO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+  const dirs = [rootPath];
+  while (dirs.length) {
+    const batch = dirs.splice(0, 24);
+    const listings = await Promise.all(batch.map(async dir => {
+      try { return { dir, entries: await fsp.readdir(dir, { withFileTypes: true }) }; }
+      catch { return { dir, entries: [] }; }
+    }));
+    const fileJobs = [];
+    for (const { dir, entries } of listings) {
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) dirs.push(full);
+        else if (entry.isFile() && AUDIO_EXTS.has(path.extname(entry.name).toLowerCase())) fileJobs.push({ full, name: entry.name });
+      }
+    }
+    for (let i = 0; i < fileJobs.length; i += 64) {
+      const chunk = fileJobs.slice(i, i + 64);
+      const rows = await Promise.all(chunk.map(async ({ full, name }) => {
         try {
           const st = await fsp.stat(full);
           const rel = path.relative(rootPath, full).split(path.sep).join('/');
-          files.push({
-            name: entry.name,
+          return {
+            name,
             path: full,
             relativePath: rel,
             size: st.size,
             lastModified: Math.trunc(st.mtimeMs),
-            type: mimeFromExt(path.extname(entry.name)),
+            type: mimeFromExt(path.extname(name)),
             fileUrl: pathToFileURL(full).href
-          });
-        } catch {}
-      }
+          };
+        } catch { return null; }
+      }));
+      for (const row of rows) if (row) files.push(row);
     }
   }
-  await walk(rootPath);
+  files.sort((a,b) => a.relativePath.localeCompare(b.relativePath, undefined, { numeric: true, sensitivity: 'base' }));
   return files;
 }
 function mimeFromExt(ext) {
@@ -149,16 +200,12 @@ function createWindow() {
 
 app.whenReady().then(() => {
   ipcMain.handle('music:choose-folder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'בחר תיקיית מוזיקה',
-      properties: ['openDirectory']
-    });
+    const result = await dialog.showOpenDialog(mainWindow, { title: 'בחר תיקיית מוזיקה', properties: ['openDirectory'] });
     if (result.canceled || !result.filePaths[0]) return { canceled: true };
     const rootPath = result.filePaths[0];
-    setLibraryRoot(rootPath);
+    await setLibraryRoot(rootPath);
     return libraryPayload(rootPath);
   });
-
   ipcMain.handle('music:reopen-folder', async () => libraryPayload(getLibraryRoot()));
   ipcMain.handle('music:library-info', async () => {
     const rootPath = getLibraryRoot();
@@ -171,6 +218,7 @@ app.whenReady().then(() => {
       const s = Math.max(0, Number(start) || 0);
       const e = Math.min(stat.size, end == null ? stat.size : Number(end));
       const length = Math.max(0, e - s);
+      if (length > 4 * 1024 * 1024) throw new Error('Requested file slice is too large');
       const buffer = Buffer.alloc(length);
       await fh.read(buffer, 0, length, s);
       return buffer;
@@ -187,13 +235,18 @@ app.whenReady().then(() => {
 
   ipcMain.handle('player-data:read', async () => readPlayerData());
   ipcMain.handle('player-data:write', async (_event, data) => writePlayerData(data));
+  ipcMain.handle('app:get-version', async () => app.getVersion());
 
   ipcMain.handle('system:open-path', async (_event, targetPath) => {
-    const err = await shell.openPath(targetPath);
+    const p = String(targetPath || '');
+    if (!p || !fs.existsSync(p)) return { ok: false, error: 'הקובץ או התיקייה אינם זמינים.' };
+    const err = await shell.openPath(p);
     return { ok: !err, error: err || '' };
   });
   ipcMain.handle('system:show-item', async (_event, targetPath) => {
-    shell.showItemInFolder(targetPath);
+    const p = String(targetPath || '');
+    if (!p || !fs.existsSync(p)) return { ok: false, error: 'הקובץ אינו זמין.' };
+    shell.showItemInFolder(p);
     return { ok: true };
   });
 
@@ -208,23 +261,16 @@ app.whenReady().then(() => {
     if (duration >= 1 && duration <= 3600) params.set('duration', String(duration));
     try {
       const response = await fetch('https://lrclib.net/api/get?' + params.toString(), {
-        headers: {
-          Accept: 'application/json',
-          'Lrclib-Client': 'Biodanza Music Player 5.4.7 (https://github.com/zurdoron1/Biodanza)'
-        }
+        headers: { Accept: 'application/json', 'Lrclib-Client': `Biodanza Music Player ${app.getVersion()} (https://github.com/zurdoron1/Biodanza)` }
       });
       if (response.status === 404) return null;
       if (response.status === 429) return { rateLimited: true };
       if (!response.ok) return null;
       const data = await response.json();
       return {
-        id: data.id || '',
-        instrumental: !!data.instrumental,
-        plainLyrics: String(data.plainLyrics || ''),
-        trackName: String(data.trackName || data.name || ''),
-        artistName: String(data.artistName || ''),
-        albumName: String(data.albumName || ''),
-        duration: Number(data.duration) || 0
+        id: data.id || '', instrumental: !!data.instrumental, plainLyrics: String(data.plainLyrics || ''),
+        trackName: String(data.trackName || data.name || ''), artistName: String(data.artistName || ''),
+        albumName: String(data.albumName || ''), duration: Number(data.duration) || 0
       };
     } catch (error) {
       console.warn('LRCLIB lookup failed', error);
