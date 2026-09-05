@@ -33,6 +33,7 @@ jobs:
 
           $html = Get-Content index.html -Raw
           $html = $html.Replace("localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));", "try{localStorage.setItem(DATA_KEY,JSON.stringify(state.annotations));}catch{}")
+          $html = $html.Replace("if(legacy.key!==k)delete state.annotations[legacy.key];", "if(legacy.key!==k){state.logicalAliases=state.logicalAliases||{};state.logicalAliases[legacy.key]=k;}")
 
           $endNeedle = "const DIR_DB='biodanzaDirectoryDB';"
           if (-not $html.Contains($endNeedle)) { throw "DIR_DB marker not found" }
@@ -116,6 +117,7 @@ jobs:
           if ($html -match '<script src="language-update.js"></script>') { throw "Language code must be inside the renderer IIFE" }
           if ($html -match 'state\.annotations\s*=\s*pkg\.annotations') { throw "Unsafe transfer database replacement detected" }
           if ($html -match 'delete state\.annotations\[oldKey\]') { throw "Unsafe relink deletion detected" }
+          if ($html -match 'if\(legacy\.key!==k\)delete state\.annotations\[legacy\.key\]') { throw "Unsafe legacy annotation deletion detected" }
           if (($html | Select-String -Pattern '<script src="workspace-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "workspace-controls injection count is not 1" }
           if (($html | Select-String -Pattern '<script src="folder-controls.js"></script>' -AllMatches).Matches.Count -ne 1) { throw "folder-controls injection count is not 1" }
 
