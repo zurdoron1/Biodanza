@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseMusicFolder: () => ipcRenderer.invoke('music:choose-folder'),
   reopenMusicFolder: () => ipcRenderer.invoke('music:reopen-folder'),
   getLibraryInfo: () => ipcRenderer.invoke('music:library-info'),
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   readFileSlice: async (filePath, start, end) => {
     const data = await ipcRenderer.invoke('music:read-slice', filePath, start, end);
     const u8 = data instanceof Uint8Array ? data : new Uint8Array(data);
