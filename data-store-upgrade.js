@@ -1,6 +1,5 @@
-// This file is injected inside the main renderer IIFE by the Windows build workflow.
-// It intentionally has access to state/saveData/render helpers from the original player.
-
+// Biodanza 5.7.0 - durable file-backed application state.
+// Inject inside the main renderer IIFE.
 let __playerDataSaveTimer = null;
 let __playerDataWriteQueue = Promise.resolve();
 let __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
@@ -14,10 +13,31 @@ function __refreshAfterPlayerDataLoad(){
   try { if (typeof renderExportMatches === 'function') renderExportMatches(); } catch {}
   try { if (typeof renderExportSequence === 'function') renderExportSequence(); } catch {}
 }
-
+function __plainObject(v){ return v && typeof v==='object' && !Array.isArray(v) ? v : {}; }
+function __playerDataPayload(){
+  return {
+    annotations: __plainObject(state.annotations),
+    chosen: Array.isArray(state.chosen) ? state.chosen : [],
+    playlistName: typeof state.playlistName==='string' ? state.playlistName : '',
+    exportSequence: Array.isArray(state.exportSequence) ? state.exportSequence : [],
+    logicalAliases: __plainObject(state.logicalAliases),
+    logicalSongs: __plainObject(state.logicalSongs),
+    preferences: __plainObject(state.preferences)
+  };
+}
+function __applyDiskState(disk){
+  state.annotations = __plainObject(disk.annotations);
+  state.chosen = Array.isArray(disk.chosen) ? disk.chosen : [];
+  if(typeof disk.playlistName==='string') state.playlistName=disk.playlistName;
+  if(Array.isArray(disk.exportSequence)) state.exportSequence=disk.exportSequence;
+  state.logicalAliases=__plainObject(disk.logicalAliases);
+  state.logicalSongs=__plainObject(disk.logicalSongs);
+  state.preferences=__plainObject(disk.preferences);
+  __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
+}
 function __writePlayerDataNow(){
   if (!window.electronAPI?.writePlayerData) return Promise.resolve({ok:false,error:'Electron data API unavailable'});
-  const payload = { annotations: state.annotations || {}, chosen: Array.isArray(state.chosen) ? state.chosen : [] };
+  const payload=__playerDataPayload();
   __playerDataWriteQueue = __playerDataWriteQueue.catch(()=>{}).then(async () => {
     const result = await window.electronAPI.writePlayerData(payload);
     if (!result?.ok) throw new Error(result?.error || 'שמירת מאגר האפיונים נכשלה');
@@ -39,10 +59,6 @@ saveData = function(){
   if (currentCount !== __lastKnownAnnotationCount) {
     __lastKnownAnnotationCount = currentCount;
     __refreshAfterPlayerDataLoad();
-    try {
-      const characterized = typeof characterizedRows === 'function' ? characterizedRows().length : currentCount;
-      if (characterized > 0) showToast(`מאגר האפיונים עודכן: ${characterized} שירים מאופיינים`);
-    } catch {}
   }
   if (window.electronAPI?.writePlayerData) {
     clearTimeout(__playerDataSaveTimer);
@@ -64,34 +80,33 @@ async function __restorePlayerDataFromDisk(){
   try {
     const disk = await window.electronAPI.readPlayerData();
     if (!disk?.ok) throw new Error(disk?.error || 'קריאת מאגר האפיונים נכשלה');
-
     if (disk.exists) {
-      state.annotations = disk.annotations && typeof disk.annotations === 'object' ? disk.annotations : {};
-      state.chosen = Array.isArray(disk.chosen) ? disk.chosen : [];
-      __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
+      __applyDiskState(disk);
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen)); } catch {}
       __refreshAfterPlayerDataLoad();
       const characterized = typeof characterizedRows === 'function' ? characterizedRows().length : Object.keys(state.annotations || {}).length;
-      try { showToast(`מאגר האפיונים נטען: ${characterized} שירים מאופיינים`); } catch {}
+      try {
+        if(disk.recoveredFromBackup) showToast(`מאגר האפיונים שוחזר אוטומטית מהגיבוי: ${characterized} רשומות`);
+        else showToast(`מאגר האפיונים נטען: ${characterized} רשומות`);
+      } catch {}
+      if(Number(disk.version||1)<2 || disk.recoveredFromBackup) setTimeout(()=>__writePlayerDataNow(),50);
       return;
     }
-
-    // First run after upgrading: migrate the old localStorage database to the file store.
     const hasLegacy = Object.keys(state.annotations || {}).length > 0 || (state.chosen || []).length > 0;
     if (hasLegacy) {
-      const result = await window.electronAPI.writePlayerData({annotations:state.annotations || {},chosen:state.chosen || []});
+      const result = await window.electronAPI.writePlayerData(__playerDataPayload());
       if (!result?.ok) throw new Error(result?.error || 'העברת המאגר לאחסון החדש נכשלה');
       __lastKnownAnnotationCount = Object.keys(state.annotations || {}).length;
       try { localStorage.removeItem(DATA_KEY); } catch {}
       try { localStorage.setItem(CHOSEN_KEY, JSON.stringify(state.chosen || [])); } catch {}
       __refreshAfterPlayerDataLoad();
-      try { showToast('מאגר האפיונים הועבר לאחסון החדש ללא מגבלת localStorage.'); } catch {}
+      try { showToast('מאגר האפיונים הועבר לאחסון הקבוע.'); } catch {}
     }
   } catch (error) {
     console.error('Player data migration/load failed', error);
     try { showToast('שגיאה בטעינת מאגר האפיונים: ' + (error?.message || error)); } catch {}
   }
 }
-
+window.__biodanzaPlayerStore={flush:__writePlayerDataNow,payload:__playerDataPayload,restore:__restorePlayerDataFromDisk,version:2};
 setTimeout(__restorePlayerDataFromDisk, 0);
