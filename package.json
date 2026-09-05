@@ -1,7 +1,7 @@
 {
   "name": "biodanza-music-player",
   "productName": "Biodanza Music Player",
-  "version": "5.6.1",
+  "version": "5.7.0",
   "description": "נגן מיון ואפיון מוזיקה לביודנסה - גרסת Electron",
   "main": "main.js",
   "private": true,
@@ -9,7 +9,8 @@
     "start": "electron .",
     "build:win": "electron-builder --win nsis --x64 --publish never",
     "build:portable": "electron-builder --win portable --x64 --publish never",
-    "build:setup": "electron-builder --win nsis --x64 --publish never"
+    "build:setup": "electron-builder --win nsis --x64 --publish never",
+    "test:regression": "node app-regression-tests.js"
   },
   "devDependencies": {
     "electron": "43.2.0",
@@ -23,12 +24,9 @@
       "folder-controls.js",
       "workspace-controls.js",
       "language-update.js",
-      "relink-upgrade.js",
-      "relink-safety-upgrade.js",
       "logical-song-upgrade.js",
-      "relink-dryrun-upgrade.js",
+      "transfer-upgrade.js",
       "data-store-upgrade.js",
-      "recovery-export.js",
       "database-display-upgrade.js",
       "main.js",
       "preload.js",
@@ -48,7 +46,7 @@
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
     },
-    "artifactName": "Biodanza Music Player Setup 5.6.1.${ext}",
+    "artifactName": "Biodanza Music Player Setup 5.7.0.${ext}",
     "asar": true
   }
 }
